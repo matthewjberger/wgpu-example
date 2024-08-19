@@ -1,4 +1,4 @@
-# Rust / Wasm / Wgpu Triangle
+# Rust / Winit / Egui / Wgpu Triangle
 
 This project demonstrates how to setup a [rust](https://www.rust-lang.org/) project
 that uses [wgpu](https://wgpu.rs/) to render a spinning triangle, supporting
