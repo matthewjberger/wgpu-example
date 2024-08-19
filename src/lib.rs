@@ -27,6 +27,7 @@ pub struct App {
     #[cfg(target_arch = "wasm32")]
     renderer_receiver: Option<Receiver<Renderer<'static>>>,
     last_size: (u32, u32),
+    panels_visible: bool,
 }
 
 impl ApplicationHandler for App {
@@ -61,7 +62,7 @@ impl ApplicationHandler for App {
 
         if let Ok(window) = event_loop.create_window(attributes) {
             let first_window_handle = self.window.is_none();
-            let window_handle = std::sync::Arc::new(window);
+            let window_handle = Arc::new(window);
             self.window = Some(window_handle.clone());
             if first_window_handle {
                 #[cfg(not(target_arch = "wasm32"))]
@@ -185,6 +186,49 @@ impl ApplicationHandler for App {
 
                 let gui_input = gui_state.take_egui_input(window);
                 gui_state.egui_ctx().begin_frame(gui_input);
+
+                #[cfg(not(target_arch = "wasm32"))]
+                let title = "Rust/Wgpu";
+
+                #[cfg(feature = "webgpu")]
+                let title = "Rust/Wgpu/Webgpu";
+
+                #[cfg(feature = "webgl")]
+                let title = "Rust/Wgpu/Webgl";
+
+                if self.panels_visible {
+                    egui::TopBottomPanel::top("top").show(gui_state.egui_ctx(), |ui| {
+                        ui.horizontal(|ui| {
+                            ui.label("File");
+                            ui.label("Edit");
+                        });
+                    });
+
+                    egui::SidePanel::left("left").show(gui_state.egui_ctx(), |ui| {
+                        ui.heading("Scene Explorer");
+                        if ui.button("Click me!").clicked() {
+                            log::info!("Button clicked!");
+                        }
+                    });
+
+                    egui::SidePanel::right("right").show(gui_state.egui_ctx(), |ui| {
+                        ui.heading("Inspector");
+                        if ui.button("Click me!").clicked() {
+                            log::info!("Button clicked!");
+                        }
+                    });
+
+                    egui::TopBottomPanel::bottom("bottom").show(gui_state.egui_ctx(), |ui| {
+                        ui.heading("Assets");
+                        if ui.button("Click me!").clicked() {
+                            log::info!("Button clicked!");
+                        }
+                    });
+                }
+
+                egui::Window::new(title).show(gui_state.egui_ctx(), |ui| {
+                    ui.checkbox(&mut self.panels_visible, "Show Panels");
+                });
 
                 let egui_winit::egui::FullOutput {
                     textures_delta,

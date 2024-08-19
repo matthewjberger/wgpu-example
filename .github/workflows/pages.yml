@@ -24,13 +24,13 @@ jobs:
         uses: Swatinem/rust-cache@v1
 
       - name: Download and install Trunk binary
-        run: wget -qO- https://github.com/trunk-rs/trunk/releases/download/v0.20.3/trunk-x86_64-unknown-linux-gnu.tar.gz | tar -xzf-
+        run: wget -qO- https://github.com/trunk-rs/trunk/releases/download/v0.18.8/trunk-x86_64-unknown-linux-gnu.tar.gz | tar -xzf-
 
       - name: Build
-        run: ./trunk build --features webgpu --release --public-url "${GITHUB_REPOSITORY#*/}"
+        run: ./trunk build --features webgpu --release --public-url "wgpu-example"
 
       - name: Deploy
         uses: JamesIves/github-pages-deploy-action@v4
         with:
-          folder: apps/app/dist
+          folder: dist
           single-commit: true
