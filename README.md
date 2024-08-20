@@ -20,3 +20,8 @@ trunk serve --features webgl --open
 ## Prerequisites (web)
 
 * [trunk](https://trunkrs.dev/)
+
+## Screenshots
+  
+![Screenshot 2024-08-20 at 8 17 14 AM](https://github.com/user-attachments/assets/fd841943-a80b-4f27-9d9e-f85bb03d8add)
+![Screenshot 2024-08-20 at 8 17 51 AM](https://github.com/user-attachments/assets/383d0122-f26d-41db-b1de-35512d697830)
