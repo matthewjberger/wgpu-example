@@ -10,10 +10,10 @@ name = "app_core"
 
 [dependencies]
 bytemuck = { version = "1.18.0", features = ["derive"] }
-egui = { git = "https://github.com/emilk/egui", rev = "1488ffa35a407653c81d1400483a67e559768878" }
+egui = { git = "https://github.com/emilk/egui", rev = "1474c17b0d436f0c39dbbbae1d59b7f872f9ac12" }
 egui-wgpu = { git = "https://github.com/emilk/egui", features = [
     "winit",
-], rev = "1488ffa35a407653c81d1400483a67e559768878" }
+], rev = "1474c17b0d436f0c39dbbbae1d59b7f872f9ac12" }
 env_logger = "0.11.5"
 log = "0.4.22"
 winit = "0.30.5"
@@ -25,13 +25,13 @@ wgpu = { version = "22.1.0", default-features = false }
 futures = "0.3.30"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-egui-winit = { git = "https://github.com/emilk/egui", rev = "1488ffa35a407653c81d1400483a67e559768878" }
+egui-winit = { git = "https://github.com/emilk/egui", rev = "1474c17b0d436f0c39dbbbae1d59b7f872f9ac12" }
 pollster = "0.3.0"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 console_error_panic_hook = "0.1.7"
 console_log = "1.0.0"
-egui-winit = { git = "https://github.com/emilk/egui", default-features = false, rev = "1488ffa35a407653c81d1400483a67e559768878" }
+egui-winit = { git = "https://github.com/emilk/egui", default-features = false, rev = "1474c17b0d436f0c39dbbbae1d59b7f872f9ac12" }
 wasm-bindgen = "0.2.93"
 wasm-bindgen-futures = "0.4.43"
 web-sys = { version = "0.3.70", features = [
