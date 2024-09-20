@@ -287,9 +287,9 @@ dependencies = [
 
 [[package]]
 name = "bytes"
-version = "1.7.1"
+version = "1.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8318a53db07bb3f8dca91a600466bdb3f2eaadeedfdbcf02e1accbad9271ba50"
+checksum = "428d9aa8fbc0670b7b8d6030a7fadd0f86151cae55e4dbbece15f3780a3dfaf3"
 
 [[package]]
 name = "calloop"
@@ -319,9 +319,9 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.1.20"
+version = "1.1.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "45bcde016d64c21da4be18b655631e5ab6d3107607e71a73a9f53eb48aae23fb"
+checksum = "07b1695e2c7e8fc85310cde85aeaab7e3097f593c91d209d3f9df76c928100f0"
 dependencies = [
  "jobserver",
  "libc",
@@ -559,7 +559,7 @@ checksum = "f25c0e292a7ca6d6498557ff1df68f32c99850012b6ea401cf8daf771f22ff53"
 [[package]]
 name = "ecolor"
 version = "0.28.1"
-source = "git+https://github.com/emilk/egui?rev=1474c17b0d436f0c39dbbbae1d59b7f872f9ac12#1474c17b0d436f0c39dbbbae1d59b7f872f9ac12"
+source = "git+https://github.com/emilk/egui?rev=06f709481a4e5e74bec961544c77e9afcae265db#06f709481a4e5e74bec961544c77e9afcae265db"
 dependencies = [
  "bytemuck",
  "emath",
@@ -568,7 +568,7 @@ dependencies = [
 [[package]]
 name = "egui"
 version = "0.28.1"
-source = "git+https://github.com/emilk/egui?rev=1474c17b0d436f0c39dbbbae1d59b7f872f9ac12#1474c17b0d436f0c39dbbbae1d59b7f872f9ac12"
+source = "git+https://github.com/emilk/egui?rev=06f709481a4e5e74bec961544c77e9afcae265db#06f709481a4e5e74bec961544c77e9afcae265db"
 dependencies = [
  "ahash",
  "emath",
@@ -580,7 +580,7 @@ dependencies = [
 [[package]]
 name = "egui-wgpu"
 version = "0.28.1"
-source = "git+https://github.com/emilk/egui?rev=1474c17b0d436f0c39dbbbae1d59b7f872f9ac12#1474c17b0d436f0c39dbbbae1d59b7f872f9ac12"
+source = "git+https://github.com/emilk/egui?rev=06f709481a4e5e74bec961544c77e9afcae265db#06f709481a4e5e74bec961544c77e9afcae265db"
 dependencies = [
  "ahash",
  "bytemuck",
@@ -598,7 +598,7 @@ dependencies = [
 [[package]]
 name = "egui-winit"
 version = "0.28.1"
-source = "git+https://github.com/emilk/egui?rev=1474c17b0d436f0c39dbbbae1d59b7f872f9ac12#1474c17b0d436f0c39dbbbae1d59b7f872f9ac12"
+source = "git+https://github.com/emilk/egui?rev=06f709481a4e5e74bec961544c77e9afcae265db#06f709481a4e5e74bec961544c77e9afcae265db"
 dependencies = [
  "ahash",
  "arboard",
@@ -614,7 +614,7 @@ dependencies = [
 [[package]]
 name = "emath"
 version = "0.28.1"
-source = "git+https://github.com/emilk/egui?rev=1474c17b0d436f0c39dbbbae1d59b7f872f9ac12#1474c17b0d436f0c39dbbbae1d59b7f872f9ac12"
+source = "git+https://github.com/emilk/egui?rev=06f709481a4e5e74bec961544c77e9afcae265db#06f709481a4e5e74bec961544c77e9afcae265db"
 dependencies = [
  "bytemuck",
 ]
@@ -645,7 +645,7 @@ dependencies = [
 [[package]]
 name = "epaint"
 version = "0.28.1"
-source = "git+https://github.com/emilk/egui?rev=1474c17b0d436f0c39dbbbae1d59b7f872f9ac12#1474c17b0d436f0c39dbbbae1d59b7f872f9ac12"
+source = "git+https://github.com/emilk/egui?rev=06f709481a4e5e74bec961544c77e9afcae265db#06f709481a4e5e74bec961544c77e9afcae265db"
 dependencies = [
  "ab_glyph",
  "ahash",
@@ -661,7 +661,7 @@ dependencies = [
 [[package]]
 name = "epaint_default_fonts"
 version = "0.28.1"
-source = "git+https://github.com/emilk/egui?rev=1474c17b0d436f0c39dbbbae1d59b7f872f9ac12#1474c17b0d436f0c39dbbbae1d59b7f872f9ac12"
+source = "git+https://github.com/emilk/egui?rev=06f709481a4e5e74bec961544c77e9afcae265db#06f709481a4e5e74bec961544c77e9afcae265db"
 
 [[package]]
 name = "equivalent"
@@ -2133,15 +2133,15 @@ checksum = "f6ccf251212114b54433ec949fd6a7841275f9ada20dddd2f29e9ceea4501493"
 
 [[package]]
 name = "unicode-width"
-version = "0.1.13"
+version = "0.1.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0336d538f7abc86d282a4189614dfaa90810dfc2c6f6427eaf88e16311dd225d"
+checksum = "7dd6e30e90baa6f72411720665d41d89b9a3d039dc45b8faea1ddd07f617f6af"
 
 [[package]]
 name = "unicode-xid"
-version = "0.2.5"
+version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "229730647fbc343e3a80e463c1db7f78f3855d3f3739bee0dda773c9a037c90a"
+checksum = "ebc1c04c71510c7f702b52b7c350734c9ff1295c464a03335b00bb84fc54f853"
 
 [[package]]
 name = "url"
