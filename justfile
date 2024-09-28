@@ -65,6 +65,10 @@ test:
 udeps:
   cargo machete
 
+# Watch for changes and rebuild the app
+watch $project="app":
+    cargo watch -x 'run -r -p {{project}}'
+
 # Display toolchain versions
 @versions:
     rustc --version
