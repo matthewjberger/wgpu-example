@@ -65,14 +65,19 @@ impl ApplicationHandler for App {
             let window_handle = Arc::new(window);
             self.window = Some(window_handle.clone());
             if first_window_handle {
+                let gui_context = egui::Context::default();
+
                 #[cfg(not(target_arch = "wasm32"))]
                 {
                     let inner_size = window_handle.inner_size();
                     self.last_size = (inner_size.width, inner_size.height);
                 }
 
-                let gui_context = egui::Context::default();
-                gui_context.set_pixels_per_point(window_handle.scale_factor() as f32);
+                #[cfg(target_arch = "wasm32")]
+                {
+                    gui_context.set_pixels_per_point(window_handle.scale_factor() as f32);
+                }
+
                 let viewport_id = gui_context.viewport_id();
                 let gui_state = egui_winit::State::new(
                     gui_context,
