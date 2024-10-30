@@ -24,7 +24,7 @@ winit = "0.30.5"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 egui-winit = "0.29.1"
-pollster = "0.3.0"
+pollster = "0.4.0"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 console_error_panic_hook = "0.1.7"
