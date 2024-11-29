@@ -9,7 +9,7 @@ path = "src/lib.rs"
 name = "app_core"
 
 [dependencies]
-bytemuck = { version = "1.19.0", features = ["derive"] }
+bytemuck = { version = "1.20.0", features = ["derive"] }
 egui = "0.29.1"
 egui-wgpu = { version = "0.29.1", features = ["winit"] }
 env_logger = "0.11.5"
@@ -30,9 +30,9 @@ pollster = "0.4.0"
 console_error_panic_hook = "0.1.7"
 console_log = "1.0.0"
 egui-winit = { version = "0.29.1", default-features = false }
-wasm-bindgen = "0.2.95"
-wasm-bindgen-futures = "0.4.45"
-web-sys = { version = "0.3.72", features = [
+wasm-bindgen = "0.2.96"
+wasm-bindgen-futures = "0.4.46"
+web-sys = { version = "0.3.73", features = [
     "Window",
     "Document",
     "HtmlElement",
