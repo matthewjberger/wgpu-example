@@ -512,7 +512,6 @@ impl Gpu {
 
         let surface_capabilities = surface.get_capabilities(&adapter);
 
-        // This assumes an sRGB surface texture
         let surface_format = surface_capabilities
             .formats
             .iter()
