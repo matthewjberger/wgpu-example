@@ -480,14 +480,6 @@ impl Gpu {
                 .request_device(
                     &wgpu::DeviceDescriptor {
                         label: Some("WGPU Device"),
-
-                        #[cfg(not(target_arch = "wasm32"))]
-                        required_features: wgpu::Features::default(),
-
-                        #[cfg(all(target_arch = "wasm32", feature = "webgpu"))]
-                        required_features: wgpu::Features::all_webgpu_mask(),
-
-                        #[cfg(all(target_arch = "wasm32", feature = "webgl"))]
                         required_features: wgpu::Features::default(),
 
                         #[cfg(not(target_arch = "wasm32"))]
