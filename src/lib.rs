@@ -46,13 +46,13 @@ impl ApplicationHandler for App {
         #[cfg(target_arch = "wasm32")]
         {
             use winit::platform::web::WindowAttributesExtWebSys;
-            let canvas = web_sys::window()
+            let canvas = wgpu::web_sys::window()
                 .unwrap()
                 .document()
                 .unwrap()
                 .get_element_by_id("canvas")
                 .unwrap()
-                .dyn_into::<web_sys::HtmlCanvasElement>()
+                .dyn_into::<wgpu::web_sys::HtmlCanvasElement>()
                 .unwrap();
             canvas_width = canvas.width();
             canvas_height = canvas.height();
