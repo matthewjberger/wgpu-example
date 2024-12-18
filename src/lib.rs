@@ -175,7 +175,6 @@ impl ApplicationHandler for App {
                 }
             }
             WindowEvent::Resized(PhysicalSize { width, height }) => {
-                let (width, height) = (width.clamp(1, 2048), height.clamp(1, 2048));
                 log::info!("Resizing renderer surface to: ({width}, {height})");
                 renderer.resize(width, height);
                 self.last_size = (width, height);
