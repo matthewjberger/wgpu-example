@@ -479,21 +479,15 @@ impl Gpu {
                 .request_device(
                     &wgpu::DeviceDescriptor {
                         label: Some("WGPU Device"),
-                        required_features: wgpu::Features::default(),
-
-                        #[cfg(not(target_arch = "wasm32"))]
-                        required_limits: wgpu::Limits {
-                            max_texture_dimension_2d: 4096, // Allow higher resolutions on native
-                            ..wgpu::Limits::downlevel_defaults()
-                        },
-
-                        #[cfg(all(target_arch = "wasm32", feature = "webgpu"))]
-                        required_limits: wgpu::Limits::default(),
-
-                        #[cfg(all(target_arch = "wasm32", feature = "webgl"))]
-                        required_limits: wgpu::Limits::downlevel_webgl2_defaults(),
-
                         memory_hints: wgpu::MemoryHints::default(),
+                        required_features: wgpu::Features::default(),
+                        #[cfg(not(target_arch = "wasm32"))]
+                        required_limits: wgpu::Limits::default().using_resolution(adapter.limits()),
+                        #[cfg(all(target_arch = "wasm32", feature = "webgpu"))]
+                        required_limits: wgpu::Limits::default().using_resolution(adapter.limits()),
+                        #[cfg(all(target_arch = "wasm32", feature = "webgl"))]
+                        required_limits: wgpu::Limits::downlevel_webgl2_defaults()
+                            .using_resolution(adapter.limits()),
                     },
                     None,
                 )
