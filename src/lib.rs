@@ -1,22 +1,14 @@
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen::prelude::*;
+
 use std::sync::Arc;
+use web_time::{Duration, Instant};
 use winit::{
     application::ApplicationHandler,
     dpi::PhysicalSize,
     event::WindowEvent,
     window::{Theme, Window},
 };
-
-#[cfg(target_arch = "wasm32")]
-use futures::channel::oneshot::Receiver;
-
-#[cfg(not(target_arch = "wasm32"))]
-pub use std::time::{Duration, Instant};
-
-#[cfg(target_arch = "wasm32")]
-pub use web_time::{Duration, Instant};
-
-#[cfg(target_arch = "wasm32")]
-use wasm_bindgen::prelude::*;
 
 #[derive(Default)]
 pub struct App {
@@ -25,7 +17,7 @@ pub struct App {
     gui_state: Option<egui_winit::State>,
     last_render_time: Option<Instant>,
     #[cfg(target_arch = "wasm32")]
-    renderer_receiver: Option<Receiver<Renderer>>,
+    renderer_receiver: Option<futures::channel::oneshot::Receiver<Renderer>>,
     last_size: (u32, u32),
     panels_visible: bool,
 }
