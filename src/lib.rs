@@ -230,8 +230,11 @@ impl ApplicationHandler for App {
                     textures_delta,
                     shapes,
                     pixels_per_point,
+                    platform_output,
                     ..
                 } = gui_state.egui_ctx().end_pass();
+
+                gui_state.handle_platform_output(window, platform_output);
 
                 let paint_jobs = gui_state.egui_ctx().tessellate(shapes, pixels_per_point);
 
