@@ -13,14 +13,14 @@ bytemuck = { version = "1.21.0", features = ["derive"] }
 egui = "0.30.0"
 egui-wgpu = { version = "0.30.0", features = ["winit"] }
 futures = "0.3.31"
-log = "0.4.22"
+log = "0.4.25"
 nalgebra-glm = { version = "0.19.0", features = [
     "convert-bytemuck",
     "serde-serialize",
 ] }
 web-time = "1.1.0"
 wgpu = { version = "23.0.1", default-features = false }
-winit = "0.30.7"
+winit = "0.30.8"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 env_logger = "0.11.6"
@@ -31,8 +31,8 @@ pollster = "0.4.0"
 console_error_panic_hook = "0.1.7"
 console_log = "1.0.0"
 egui-winit = { version = "0.30.0", default-features = false }
-wasm-bindgen = "0.2.99"
-wasm-bindgen-futures = "0.4.49"
+wasm-bindgen = "0.2.100"
+wasm-bindgen-futures = "0.4.50"
 
 [features]
 default = ["wgpu/default"]
