@@ -1,5 +1,6 @@
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
+use wgpu::InstanceDescriptor;
 
 use std::sync::Arc;
 use web_time::{Duration, Instant};
@@ -350,6 +351,7 @@ impl Renderer {
                     mip_level_count: None,
                     base_array_layer: 0,
                     array_layer_count: None,
+                    usage: None,
                 });
 
         encoder.insert_debug_marker("Render scene");
@@ -445,6 +447,7 @@ impl Gpu {
             base_array_layer: 0,
             array_layer_count: None,
             mip_level_count: None,
+            usage: None,
         })
     }
 
@@ -453,11 +456,7 @@ impl Gpu {
         width: u32,
         height: u32,
     ) -> Self {
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-            backends: wgpu::util::backend_bits_from_env().unwrap_or_else(wgpu::Backends::all),
-            ..Default::default()
-        });
-
+        let instance = wgpu::Instance::new(&InstanceDescriptor::default());
         let surface = instance.create_surface(window).unwrap();
 
         let adapter = instance
