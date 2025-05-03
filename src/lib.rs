@@ -171,6 +171,9 @@ impl ApplicationHandler for App {
                 log::info!("Resizing renderer surface to: ({width}, {height})");
                 renderer.resize(width, height);
                 self.last_size = (width, height);
+
+                let scale_factor = window.scale_factor() as f32;
+                gui_state.egui_ctx().set_pixels_per_point(scale_factor);
             }
             WindowEvent::CloseRequested => {
                 log::info!("Close requested. Exiting...");
