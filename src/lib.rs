@@ -53,69 +53,72 @@ impl ApplicationHandler for App {
             attributes = attributes.with_canvas(Some(canvas));
         }
 
-        if let Ok(window) = event_loop.create_window(attributes) {
-            let first_window_handle = self.window.is_none();
-            let window_handle = Arc::new(window);
-            self.window = Some(window_handle.clone());
-            if first_window_handle {
-                let gui_context = egui::Context::default();
+        let Ok(window) = event_loop.create_window(attributes) else {
+            return;
+        };
 
-                #[cfg(not(target_arch = "wasm32"))]
-                {
-                    let inner_size = window_handle.inner_size();
-                    self.last_size = (inner_size.width, inner_size.height);
-                }
-
-                #[cfg(target_arch = "wasm32")]
-                {
-                    gui_context.set_pixels_per_point(window_handle.scale_factor() as f32);
-                }
-
-                let viewport_id = gui_context.viewport_id();
-                let gui_state = egui_winit::State::new(
-                    gui_context,
-                    viewport_id,
-                    &window_handle,
-                    Some(window_handle.scale_factor() as _),
-                    Some(Theme::Dark),
-                    None,
-                );
-
-                #[cfg(not(target_arch = "wasm32"))]
-                let (width, height) = (
-                    window_handle.inner_size().width,
-                    window_handle.inner_size().height,
-                );
-
-                #[cfg(not(target_arch = "wasm32"))]
-                {
-                    env_logger::init();
-                    let renderer = pollster::block_on(async move {
-                        Renderer::new(window_handle.clone(), width, height).await
-                    });
-                    self.renderer = Some(renderer);
-                }
-
-                #[cfg(target_arch = "wasm32")]
-                {
-                    let (sender, receiver) = futures::channel::oneshot::channel();
-                    self.renderer_receiver = Some(receiver);
-                    std::panic::set_hook(Box::new(console_error_panic_hook::hook));
-                    console_log::init().expect("Failed to initialize logger!");
-                    log::info!("Canvas dimensions: ({canvas_width} x {canvas_height})");
-                    wasm_bindgen_futures::spawn_local(async move {
-                        let renderer =
-                            Renderer::new(window_handle.clone(), canvas_width, canvas_height).await;
-                        if sender.send(renderer).is_err() {
-                            log::error!("Failed to create and send renderer!");
-                        }
-                    });
-                }
-
-                self.gui_state = Some(gui_state);
-                self.last_render_time = Some(Instant::now());
-            }
+        let first_window_handle = self.window.is_none();
+        let window_handle = Arc::new(window);
+        self.window = Some(window_handle.clone());
+        if !first_window_handle {
+            return;
         }
+        let gui_context = egui::Context::default();
+
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let inner_size = window_handle.inner_size();
+            self.last_size = (inner_size.width, inner_size.height);
+        }
+
+        #[cfg(target_arch = "wasm32")]
+        {
+            gui_context.set_pixels_per_point(window_handle.scale_factor() as f32);
+        }
+
+        let viewport_id = gui_context.viewport_id();
+        let gui_state = egui_winit::State::new(
+            gui_context,
+            viewport_id,
+            &window_handle,
+            Some(window_handle.scale_factor() as _),
+            Some(Theme::Dark),
+            None,
+        );
+
+        #[cfg(not(target_arch = "wasm32"))]
+        let (width, height) = (
+            window_handle.inner_size().width,
+            window_handle.inner_size().height,
+        );
+
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            env_logger::init();
+            let renderer = pollster::block_on(async move {
+                Renderer::new(window_handle.clone(), width, height).await
+            });
+            self.renderer = Some(renderer);
+        }
+
+        #[cfg(target_arch = "wasm32")]
+        {
+            let (sender, receiver) = futures::channel::oneshot::channel();
+            self.renderer_receiver = Some(receiver);
+            std::panic::set_hook(Box::new(console_error_panic_hook::hook));
+            console_log::init().expect("Failed to initialize logger!");
+            log::info!("Canvas dimensions: ({canvas_width} x {canvas_height})");
+            wasm_bindgen_futures::spawn_local(async move {
+                let renderer =
+                    Renderer::new(window_handle.clone(), canvas_width, canvas_height).await;
+                if sender.send(renderer).is_err() {
+                    log::error!("Failed to create and send renderer!");
+                }
+            });
+        }
+
+        self.gui_state = Some(gui_state);
+        self.last_render_time = Some(Instant::now());
     }
 
     fn window_event(
