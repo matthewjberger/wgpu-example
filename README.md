@@ -6,6 +6,8 @@ both webgl and webgpu [wasm](https://webassembly.org/) as well as native.
 
 > If you're looking to use vulkan directly instead, check out this [rust + vulkan example](https://github.com/matthewjberger/vulkan-example)
 
+<img width="802" height="632" alt="native" src="https://github.com/user-attachments/assets/aaad05db-8a5b-4306-a166-2692b4e365fb" />
+
 ## Quickstart
 
 ```
@@ -27,6 +29,6 @@ trunk serve --features webgl --open
 * [trunk](https://trunkrs.dev/)
 
 ## Screenshots
-  
-![Screenshot 2024-08-20 at 8 17 14 AM](https://github.com/user-attachments/assets/fd841943-a80b-4f27-9d9e-f85bb03d8add)
-![Screenshot 2024-08-20 at 8 17 51 AM](https://github.com/user-attachments/assets/383d0122-f26d-41db-b1de-35512d697830)
+
+<img width="1665" height="1287" alt="webgl" src="https://github.com/user-attachments/assets/d8771e73-4b0b-459a-baf2-5ce1f79f943e" />
+<img width="1665" height="1287" alt="webgpu" src="https://github.com/user-attachments/assets/494f2a88-087c-4045-8433-e96f042b7988" />

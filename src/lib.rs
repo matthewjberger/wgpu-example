@@ -20,7 +20,6 @@ pub struct App {
     #[cfg(target_arch = "wasm32")]
     renderer_receiver: Option<futures::channel::oneshot::Receiver<Renderer>>,
     last_size: (u32, u32),
-    panels_visible: bool,
 }
 
 impl ApplicationHandler for App {
@@ -199,39 +198,63 @@ impl ApplicationHandler for App {
                 #[cfg(feature = "webgl")]
                 let title = "Rust/Wgpu/Webgl";
 
-                if self.panels_visible {
+                {
                     egui::TopBottomPanel::top("top").show(gui_state.egui_ctx(), |ui| {
                         ui.horizontal(|ui| {
-                            ui.label("File");
-                            ui.label("Edit");
+                            egui::MenuBar::new().ui(ui, |ui| {
+                                ui.menu_button("File", |ui| {
+                                    if ui.button("Load").clicked() {
+                                        ui.close();
+                                    }
+                                    if ui.button("Save").clicked() {
+                                        ui.close();
+                                    }
+                                    ui.separator();
+                                    if ui.button("Import").clicked() {
+                                        ui.close();
+                                    }
+                                });
+
+                                ui.menu_button("Edit", |ui| {
+                                    if ui.button("Clear").clicked() {
+                                        ui.close();
+                                    }
+                                    if ui.button("Reset").clicked() {
+                                        ui.close();
+                                    }
+                                });
+
+                                ui.separator();
+
+                                ui.label(
+                                    egui::RichText::new(title).color(egui::Color32::LIGHT_GREEN),
+                                );
+
+                                ui.separator();
+                            });
+
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::RIGHT), |ui| {
+                                ui.add_space(10.0);
+                                ui.label(
+                                    egui::RichText::new("v0.1.0").color(egui::Color32::ORANGE),
+                                );
+                                ui.separator();
+                            });
                         });
                     });
 
                     egui::SidePanel::left("left").show(gui_state.egui_ctx(), |ui| {
-                        ui.heading("Scene Explorer");
-                        if ui.button("Click me!").clicked() {
-                            log::info!("Button clicked!");
-                        }
+                        ui.heading("Scene Tree");
                     });
 
                     egui::SidePanel::right("right").show(gui_state.egui_ctx(), |ui| {
                         ui.heading("Inspector");
-                        if ui.button("Click me!").clicked() {
-                            log::info!("Button clicked!");
-                        }
                     });
 
-                    egui::TopBottomPanel::bottom("bottom").show(gui_state.egui_ctx(), |ui| {
-                        ui.heading("Assets");
-                        if ui.button("Click me!").clicked() {
-                            log::info!("Button clicked!");
-                        }
+                    egui::TopBottomPanel::bottom("Console").show(gui_state.egui_ctx(), |ui| {
+                        ui.heading("Console");
                     });
                 }
-
-                egui::Window::new(title).show(gui_state.egui_ctx(), |ui| {
-                    ui.checkbox(&mut self.panels_visible, "Show Panels");
-                });
 
                 let egui_winit::egui::FullOutput {
                     textures_delta,
@@ -668,7 +691,7 @@ impl Vertex {
         wgpu::vertex_attr_array![0 => Float32x4, 1 => Float32x4].to_vec()
     }
 
-    pub fn description(attributes: &[wgpu::VertexAttribute]) -> wgpu::VertexBufferLayout {
+    pub fn description(attributes: &[wgpu::VertexAttribute]) -> wgpu::VertexBufferLayout<'_> {
         wgpu::VertexBufferLayout {
             array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Vertex,
