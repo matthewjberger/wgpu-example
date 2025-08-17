@@ -38,19 +38,3 @@ wasm-bindgen-futures = "0.4.50"
 default = ["wgpu/default"]
 webgl = ["wgpu/webgl"]
 webgpu = ["wgpu/webgpu"]
-
-# For very small final binary size,
-# uncomment the following release profile and build with it
-#
-# [profile.release]
-# codegen-units = 1 # Reduce parallel code generation units
-# strip = true      # Automatically strip symbols from the binary.
-# opt-level = "z"   # Optimize for size
-# lto = true        # Link time optimization
-# panic = "abort"   # On panic, abort immediately rather than unwinding. Don't use this if you want backtraces.
-#
-# Then compress the final executable further with:
-# upx --best --lzma ./target/release/app
-#
-# Or on windows,
-# upx --best --lzma ./target/release/app.exe

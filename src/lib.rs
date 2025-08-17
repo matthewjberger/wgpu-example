@@ -149,12 +149,10 @@ impl ApplicationHandler for App {
             return;
         };
 
-        // Receive gui window event
         if gui_state.on_window_event(window, &event).consumed {
             return;
         }
 
-        // If the gui didn't consume the event, handle it
         match event {
             WindowEvent::KeyboardInput {
                 event:
@@ -164,12 +162,20 @@ impl ApplicationHandler for App {
                     },
                 ..
             } => {
-                // Exit by pressing the escape key
                 if matches!(key_code, winit::keyboard::KeyCode::Escape) {
                     event_loop.exit();
                 }
             }
+            WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
+                gui_state
+                    .egui_ctx()
+                    .set_pixels_per_point(scale_factor as f32);
+            }
             WindowEvent::Resized(PhysicalSize { width, height }) => {
+                if width == 0 || height == 0 {
+                    return;
+                }
+
                 log::info!("Resizing renderer surface to: ({width}, {height})");
                 renderer.resize(width, height);
                 self.last_size = (width, height);
@@ -270,6 +276,9 @@ impl ApplicationHandler for App {
 
                 let screen_descriptor = {
                     let (width, height) = self.last_size;
+                    if width == 0 || height == 0 {
+                        return;
+                    }
                     egui_wgpu::ScreenDescriptor {
                         size_in_pixels: [width, height],
                         pixels_per_point: window.scale_factor() as f32,
@@ -362,11 +371,19 @@ impl Renderer {
             &screen_descriptor,
         );
 
-        let surface_texture = self
-            .gpu
-            .surface
-            .get_current_texture()
-            .expect("Failed to get surface texture!");
+        let surface_texture = match self.gpu.surface.get_current_texture() {
+            Ok(texture) => texture,
+            Err(wgpu::SurfaceError::Outdated) => {
+                self.gpu
+                    .surface
+                    .configure(&self.gpu.device, &self.gpu.surface_config);
+                self.gpu
+                    .surface
+                    .get_current_texture()
+                    .expect("Failed to get surface texture after reconfiguration!")
+            }
+            Err(error) => panic!("Failed to get surface texture: {:?}", error),
+        };
 
         let surface_texture_view =
             surface_texture
@@ -385,10 +402,6 @@ impl Renderer {
 
         encoder.insert_debug_marker("Render scene");
 
-        // This scope around the crate::render_pass prevents the
-        // crate::render_pass from holding a borrow to the encoder,
-        // which would prevent calling `.finish()` in
-        // preparation for queue submission.
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass"),
@@ -522,7 +535,7 @@ impl Gpu {
             .formats
             .iter()
             .copied()
-            .find(|f| !f.is_srgb()) // egui wants a non-srgb surface texture
+            .find(|f| !f.is_srgb())
             .unwrap_or(surface_capabilities.formats[0]);
 
         let surface_config = wgpu::SurfaceConfiguration {
@@ -782,7 +795,7 @@ const VERTICES: [Vertex; 3] = [
     },
 ];
 
-const INDICES: [u32; 3] = [0, 1, 2]; // Clockwise winding order
+const INDICES: [u32; 3] = [0, 1, 2];
 
 const SHADER_SOURCE: &str = "
 struct Uniform {
