@@ -19,8 +19,8 @@ trunk serve --features webgpu --open
 trunk serve --features webgl --open
 ```
 
-> Firefox is still [working on wgpu support](https://news.ycombinator.com/item?id=41157383)
-> but chromium-based browsers like Brave, Vivaldi, Chrome, etc will work
+> All chromium-based browsers like Brave, Vivaldi, Chrome, etc support wgpu.
+> Firefox also [supports wgpu](https://mozillagfx.wordpress.com/2025/07/15/shipping-webgpu-on-windows-in-firefox-141/) now starting with version `141`.
 
 ## Prerequisites (web)
 
