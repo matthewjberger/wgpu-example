@@ -15,7 +15,7 @@ egui = "0.32.3"
 egui-wgpu = { version = "0.32.3", features = ["winit"] }
 futures = "0.3.31"
 log = "0.4.28"
-nalgebra-glm = { version = "0.19.0", features = [
+nalgebra-glm = { version = "0.20.0", features = [
     "convert-bytemuck",
     "serde-serialize",
 ] }
