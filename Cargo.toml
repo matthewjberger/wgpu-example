@@ -10,7 +10,7 @@ path = "src/lib.rs"
 name = "app_core"
 
 [dependencies]
-bytemuck = { version = "1.23.2", features = ["derive"] }
+bytemuck = { version = "1.24.0", features = ["derive"] }
 egui = "0.32.3"
 egui-wgpu = { version = "0.32.3", features = ["winit"] }
 futures = "0.3.31"
