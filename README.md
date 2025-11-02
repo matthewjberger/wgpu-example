@@ -4,9 +4,9 @@ This project demonstrates how to setup a [rust](https://www.rust-lang.org/) proj
 that uses [wgpu](https://wgpu.rs/) to render a spinning triangle, supporting
 both webgl and webgpu [wasm](https://webassembly.org/) as well as native.
 
-<img width="802" height="632" alt="native" src="https://github.com/user-attachments/assets/aaad05db-8a5b-4306-a166-2692b4e365fb" />
-
 > If you're looking for a Vulkan example, check out [the vulkan-example repo](https://github.com/matthewjberger/vulkan-example)
+
+<img width="802" height="632" alt="native" src="https://github.com/user-attachments/assets/aaad05db-8a5b-4306-a166-2692b4e365fb" />
 
 ## Quickstart
 
