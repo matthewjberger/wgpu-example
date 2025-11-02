@@ -315,9 +315,11 @@ impl Renderer {
         let egui_renderer = egui_wgpu::Renderer::new(
             &gpu.device,
             gpu.surface_config.format,
-            Some(Self::DEPTH_FORMAT),
-            1,
-            false,
+            egui_wgpu::RendererOptions {
+                depth_stencil_format: Some(Self::DEPTH_FORMAT),
+                msaa_samples: 1,
+                ..Default::default()
+            },
         );
 
         let scene = Scene::new(&gpu.device, gpu.surface_format);
@@ -417,6 +419,7 @@ impl Renderer {
                         }),
                         store: wgpu::StoreOp::Store,
                     },
+                    depth_slice: None,
                 })],
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                     view: &self.depth_texture_view,
@@ -523,6 +526,7 @@ impl Gpu {
                     #[cfg(all(target_arch = "wasm32", feature = "webgl"))]
                     required_limits: wgpu::Limits::downlevel_webgl2_defaults()
                         .using_resolution(adapter.limits()),
+                    experimental_features: wgpu::ExperimentalFeatures::disabled(),
                     trace: wgpu::Trace::Off,
                 })
                 .await

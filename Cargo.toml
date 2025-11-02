@@ -11,8 +11,8 @@ name = "app_core"
 
 [dependencies]
 bytemuck = { version = "1.24.0", features = ["derive"] }
-egui = "0.32.3"
-egui-wgpu = { version = "0.32.3", features = ["winit"] }
+egui = "0.33.0"
+egui-wgpu = { version = "0.33.0", features = ["winit"] }
 futures = "0.3.31"
 log = "0.4.28"
 nalgebra-glm = { version = "0.20.0", features = [
@@ -20,20 +20,20 @@ nalgebra-glm = { version = "0.20.0", features = [
     "serde-serialize",
 ] }
 web-time = "1.1.0"
-wgpu = { version = "25.0.2", default-features = false }
+wgpu = { version = "27.0.1", default-features = false }
 winit = "0.30.12"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 env_logger = "0.11.8"
-egui-winit = "0.32.3"
+egui-winit = "0.33.0"
 pollster = "0.4.0"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 console_error_panic_hook = "0.1.7"
 console_log = "1.0.0"
-egui-winit = { version = "0.32.3", default-features = false }
-wasm-bindgen = "0.2.104"
-wasm-bindgen-futures = "0.4.54"
+egui-winit = { version = "0.33.0", default-features = false }
+wasm-bindgen = "0.2.105"
+wasm-bindgen-futures = "0.4.55"
 
 [features]
 default = ["wgpu/default"]
