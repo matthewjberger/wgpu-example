@@ -2,7 +2,7 @@
 
 This project demonstrates how to setup a [rust](https://www.rust-lang.org/) project
 that uses [wgpu](https://wgpu.rs/) to render a spinning triangle, supporting
-both webgl and webgpu [wasm](https://webassembly.org/), native desktop, and Android.
+both webgl and webgpu [wasm](https://webassembly.org/), native desktop, Android, and Steam Deck.
 
 It also includes an [OpenXR](https://www.khronos.org/openxr/) VR mode with hand tracking, procedural skybox, and infinite grid.
 
@@ -14,25 +14,45 @@ It also includes an [OpenXR](https://www.khronos.org/openxr/) VR mode with hand 
 
 ## Quickstart
 
+### Native Desktop
+
 ```bash
-# native
 cargo run -r
+```
 
-# webgpu
+### Web (WebAssembly)
+
+WebGPU:
+```bash
 trunk serve --features webgpu --open
+```
 
-# webgl
+WebGL:
+```bash
 trunk serve --features webgl --open
-
-# android
-just run-android DEVICE_ID
-
-# OpenXR VR mode
-just run-openxr
 ```
 
 > All chromium-based browsers like Brave, Vivaldi, Chrome, etc support wgpu.
 > Firefox also [supports wgpu](https://mozillagfx.wordpress.com/2025/07/15/shipping-webgpu-on-windows-in-firefox-141/) now starting with version `141`.
+
+### Android
+
+```bash
+just run-android DEVICE_ID
+```
+
+### Steam Deck
+
+```bash
+just build-steamdeck
+just deploy-steamdeck
+```
+
+### OpenXR VR Mode
+
+```bash
+just run-openxr
+```
 
 ## OpenXR VR Mode
 
@@ -102,6 +122,55 @@ just list-android
 ```
 
 The Android build uses the `--features android` flag which enables wgpu's Vulkan backend. Requires Android API level 24 or higher.
+
+## Prerequisites (Steam Deck)
+
+* [cross](https://github.com/cross-rs/cross)
+* Docker (for cross-compilation)
+
+### Steam Deck Build Instructions
+
+1. Ensure Docker is installed and running (required for cross-compilation).
+
+2. Install Steam Deck tooling (first time only):
+   ```bash
+   just init-steamdeck
+   ```
+   This installs the cross tool.
+
+3. Build for Steam Deck:
+   ```bash
+   just build-steamdeck
+   ```
+   This cross-compiles the binary to `target/x86_64-unknown-linux-gnu/release/app`.
+
+4. Deploy to Steam Deck:
+   ```bash
+   just deploy-steamdeck
+   ```
+   This transfers the binary to your Steam Deck at `steamdeck.local` into `~/Downloads`.
+
+5. Run on Steam Deck:
+   ```bash
+   just steamdeck-ssh
+   cd ~/Downloads
+   ./app
+   ```
+
+### Additional Steam Deck Commands
+
+```bash
+# SSH into Steam Deck
+just steamdeck-ssh
+
+# Build only (without deploying)
+just build-steamdeck
+
+# Deploy only (assumes already built)
+just deploy-steamdeck
+```
+
+The Steam Deck build uses cross-compilation via Docker containers to ensure compatibility with the Steam Deck's Linux environment. The `Cross.toml` file configures the necessary system libraries for graphics and windowing support.
 
 ## Screenshots
 

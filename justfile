@@ -112,6 +112,22 @@ install-android device:
 run-android device:
     x run --release --arch arm64 --features android --device adb:{{device}}
 
+# Install Steam Deck tooling
+init-steamdeck:
+    cargo install --locked cross
+
+# Build the app for Steam Deck
+build-steamdeck:
+    cross build --release --target x86_64-unknown-linux-gnu
+
+# Deploy the app to Steam Deck
+deploy-steamdeck:
+    scp target/x86_64-unknown-linux-gnu/release/app deck@steamdeck.local:~/Downloads
+
+# SSH into Steam Deck
+steamdeck-ssh:
+    ssh deck@steamdeck.local
+
 # Run the test suite
 test:
     cargo test --all -- --nocapture
