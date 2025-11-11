@@ -2,6 +2,12 @@
 use wasm_bindgen::prelude::*;
 use wgpu::InstanceDescriptor;
 
+#[cfg(all(not(target_arch = "wasm32"), feature = "openxr"))]
+pub mod xr;
+
+#[cfg(all(not(target_arch = "wasm32"), feature = "openxr"))]
+pub use xr::run_xr;
+
 use std::sync::Arc;
 use web_time::{Duration, Instant};
 use winit::{
@@ -563,9 +569,72 @@ impl Gpu {
             surface_format,
         }
     }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    pub async fn new_async_headless() -> Self {
+        let instance = wgpu::Instance::new(&InstanceDescriptor::default());
+
+        let adapter = instance
+            .request_adapter(&wgpu::RequestAdapterOptions {
+                power_preference: wgpu::PowerPreference::default(),
+                compatible_surface: None,
+                force_fallback_adapter: false,
+            })
+            .await
+            .expect("Failed to request adapter!");
+
+        let (device, queue) = {
+            log::info!("WGPU Adapter Features: {:#?}", adapter.features());
+            adapter
+                .request_device(&wgpu::DeviceDescriptor {
+                    label: Some("WGPU Device"),
+                    memory_hints: wgpu::MemoryHints::default(),
+                    required_features: wgpu::Features::default(),
+                    required_limits: wgpu::Limits::default().using_resolution(adapter.limits()),
+                    experimental_features: wgpu::ExperimentalFeatures::disabled(),
+                    trace: wgpu::Trace::Off,
+                })
+                .await
+                .expect("Failed to request a device!")
+        };
+
+        let surface_format = wgpu::TextureFormat::Rgba8UnormSrgb;
+        let surface_config = wgpu::SurfaceConfiguration {
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            format: surface_format,
+            width: 1,
+            height: 1,
+            present_mode: wgpu::PresentMode::Fifo,
+            alpha_mode: wgpu::CompositeAlphaMode::Opaque,
+            view_formats: vec![],
+            desired_maximum_frame_latency: 2,
+        };
+
+        let dummy_surface = unsafe {
+            let handle =
+                wgpu::rwh::RawDisplayHandle::Windows(wgpu::rwh::WindowsDisplayHandle::new());
+            let window_handle = wgpu::rwh::RawWindowHandle::Win32(
+                wgpu::rwh::Win32WindowHandle::new(std::num::NonZeroIsize::new(1).unwrap()),
+            );
+            instance
+                .create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {
+                    raw_display_handle: handle,
+                    raw_window_handle: window_handle,
+                })
+                .unwrap()
+        };
+
+        Self {
+            surface: dummy_surface,
+            device,
+            queue,
+            surface_config,
+            surface_format,
+        }
+    }
 }
 
-struct Scene {
+pub struct Scene {
     pub model: nalgebra_glm::Mat4,
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer,
@@ -698,7 +767,7 @@ impl Scene {
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-struct Vertex {
+pub struct Vertex {
     position: [f32; 4],
     color: [f32; 4],
 }
@@ -719,11 +788,11 @@ impl Vertex {
 
 #[repr(C)]
 #[derive(Default, Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-struct UniformBuffer {
+pub struct UniformBuffer {
     mvp: nalgebra_glm::Mat4,
 }
 
-struct UniformBinding {
+pub struct UniformBinding {
     pub buffer: wgpu::Buffer,
     pub bind_group: wgpu::BindGroup,
     pub bind_group_layout: wgpu::BindGroupLayout,
@@ -800,6 +869,81 @@ const VERTICES: [Vertex; 3] = [
 ];
 
 const INDICES: [u32; 3] = [0, 1, 2];
+
+pub const CUBE_VERTICES: [Vertex; 8] = [
+    Vertex {
+        position: [-0.05, -0.05, -0.05, 1.0],
+        color: [1.0, 1.0, 1.0, 1.0],
+    },
+    Vertex {
+        position: [0.05, -0.05, -0.05, 1.0],
+        color: [1.0, 1.0, 1.0, 1.0],
+    },
+    Vertex {
+        position: [0.05, 0.05, -0.05, 1.0],
+        color: [1.0, 1.0, 1.0, 1.0],
+    },
+    Vertex {
+        position: [-0.05, 0.05, -0.05, 1.0],
+        color: [1.0, 1.0, 1.0, 1.0],
+    },
+    Vertex {
+        position: [-0.05, -0.05, 0.05, 1.0],
+        color: [1.0, 1.0, 1.0, 1.0],
+    },
+    Vertex {
+        position: [0.05, -0.05, 0.05, 1.0],
+        color: [1.0, 1.0, 1.0, 1.0],
+    },
+    Vertex {
+        position: [0.05, 0.05, 0.05, 1.0],
+        color: [1.0, 1.0, 1.0, 1.0],
+    },
+    Vertex {
+        position: [-0.05, 0.05, 0.05, 1.0],
+        color: [1.0, 1.0, 1.0, 1.0],
+    },
+];
+
+pub const CUBE_INDICES: [u32; 36] = [
+    0, 1, 2, 2, 3, 0, 1, 5, 6, 6, 2, 1, 5, 4, 7, 7, 6, 5, 4, 0, 3, 3, 7, 4, 3, 2, 6, 6, 7, 3, 4, 5,
+    1, 1, 0, 4,
+];
+
+pub const GREEN_CUBE_VERTICES: [Vertex; 8] = [
+    Vertex {
+        position: [-0.05, -0.05, -0.05, 1.0],
+        color: [0.0, 1.0, 0.0, 1.0],
+    },
+    Vertex {
+        position: [0.05, -0.05, -0.05, 1.0],
+        color: [0.0, 1.0, 0.0, 1.0],
+    },
+    Vertex {
+        position: [0.05, 0.05, -0.05, 1.0],
+        color: [0.0, 1.0, 0.0, 1.0],
+    },
+    Vertex {
+        position: [-0.05, 0.05, -0.05, 1.0],
+        color: [0.0, 1.0, 0.0, 1.0],
+    },
+    Vertex {
+        position: [-0.05, -0.05, 0.05, 1.0],
+        color: [0.0, 1.0, 0.0, 1.0],
+    },
+    Vertex {
+        position: [0.05, -0.05, 0.05, 1.0],
+        color: [0.0, 1.0, 0.0, 1.0],
+    },
+    Vertex {
+        position: [0.05, 0.05, 0.05, 1.0],
+        color: [0.0, 1.0, 0.0, 1.0],
+    },
+    Vertex {
+        position: [-0.05, 0.05, 0.05, 1.0],
+        color: [0.0, 1.0, 0.0, 1.0],
+    },
+];
 
 const SHADER_SOURCE: &str = "
 struct Uniform {

@@ -41,6 +41,10 @@ lint:
 run:
     cargo run -r
 
+# Run the desktop app in OpenXR mode
+run-openxr:
+    cargo run -r --features openxr
+
 # Build the app with wgpu + WebGL
 build-webgl:
     trunk build --features webgl

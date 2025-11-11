@@ -4,6 +4,8 @@ This project demonstrates how to setup a [rust](https://www.rust-lang.org/) proj
 that uses [wgpu](https://wgpu.rs/) to render a spinning triangle, supporting
 both webgl and webgpu [wasm](https://webassembly.org/) as well as native.
 
+It also includes an [OpenXR](https://www.khronos.org/openxr/) VR mode with hand tracking, procedural skybox, and infinite grid.
+
 > If you're looking for a Vulkan example, check out [the vulkan-example repo](https://github.com/matthewjberger/vulkan-example)
 >
 > If you're looking for an OpenGL example, check out [the opengl-example repo](https://github.com/matthewjberger/opengl-example)
@@ -12,7 +14,7 @@ both webgl and webgpu [wasm](https://webassembly.org/) as well as native.
 
 ## Quickstart
 
-```
+```bash
 # native
 cargo run -r
 
@@ -21,10 +23,25 @@ trunk serve --features webgpu --open
 
 # webgl
 trunk serve --features webgl --open
+
+# OpenXR VR mode
+just run-openxr
 ```
 
 > All chromium-based browsers like Brave, Vivaldi, Chrome, etc support wgpu.
 > Firefox also [supports wgpu](https://mozillagfx.wordpress.com/2025/07/15/shipping-webgpu-on-windows-in-firefox-141/) now starting with version `141`.
+
+## OpenXR VR Mode
+
+The OpenXR VR mode renders a spinning triangle, infinite grid, and procedural skybox in virtual reality with hand tracking.
+
+### Setup
+
+1. Install [SteamVR](https://store.steampowered.com/app/250820/SteamVR/)
+2. Install [Virtual Desktop](https://www.vrdesktop.net/) (or another OpenXR-compatible VR runtime)
+3. Start Virtual Desktop and stream your desktop to your VR headset
+4. On your desktop, run `just run-openxr`
+5. The application will appear in VR
 
 ## Prerequisites (web)
 
