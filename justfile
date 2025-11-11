@@ -61,6 +61,57 @@ run-webgl:
 run-webgpu:
     trunk serve --features webgpu --open
 
+# Install Android tooling
+init-android:
+    rustup target add aarch64-linux-android
+    rustup target add armv7-linux-androideabi
+    rustup target add i686-linux-android
+    rustup target add x86_64-linux-android
+    cargo install --locked xbuild
+
+# Connect to Android device via wireless ADB (provide IP and port)
+connect-android ip port="5555":
+    adb connect {{ip}}:{{port}}
+
+# List connected Android devices
+list-android:
+    adb devices
+
+# Build the app for Android (arm64)
+[unix]
+build-android:
+    x build --release --platform android --arch arm64 --features android
+    cp -f target/x/release/android/arm64/cargo/aarch64-linux-android/release/libapp_core.so target/x/release/android/arm64/cargo/aarch64-linux-android/release/libapp.so
+
+[windows]
+build-android:
+    x build --release --platform android --arch arm64 --features android
+    Copy-Item -Force target/x/release/android/arm64/cargo/aarch64-linux-android/release/libapp_core.so target/x/release/android/arm64/cargo/aarch64-linux-android/release/libapp.so
+
+# Build the app for Android (all architectures)
+[unix]
+build-android-all:
+    x build --release --platform android --arch arm64 --features android
+    cp -f target/x/release/android/arm64/cargo/aarch64-linux-android/release/libapp_core.so target/x/release/android/arm64/cargo/aarch64-linux-android/release/libapp.so
+    x build --release --platform android --arch x64 --features android
+    cp -f target/x/release/android/x64/cargo/x86_64-linux-android/release/libapp_core.so target/x/release/android/x64/cargo/x86_64-linux-android/release/libapp.so
+
+[windows]
+build-android-all:
+    x build --release --platform android --arch arm64 --features android
+    Copy-Item -Force target/x/release/android/arm64/cargo/aarch64-linux-android/release/libapp_core.so target/x/release/android/arm64/cargo/aarch64-linux-android/release/libapp.so
+    x build --release --platform android --arch x64 --features android
+    Copy-Item -Force target/x/release/android/x64/cargo/x86_64-linux-android/release/libapp_core.so target/x/release/android/x64/cargo/x86_64-linux-android/release/libapp.so
+
+# Install the app on connected Android device
+install-android device:
+    x build --release --arch arm64 --features android --device adb:{{device}}
+    adb -s {{device}} install -r target/x/release/android/app.apk
+
+# Run the app on connected Android device
+run-android device:
+    x run --release --arch arm64 --features android --device adb:{{device}}
+
 # Run the test suite
 test:
     cargo test --all -- --nocapture

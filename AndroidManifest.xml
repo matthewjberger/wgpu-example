@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.example.wgpu_android">
+
+    <uses-feature android:glEsVersion="0x00030000" android:required="true" />
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <application
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="Wgpu Android Example"
+        android:theme="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen"
+        android:hasCode="false">
+        <activity
+            android:name="android.app.NativeActivity"
+            android:exported="true"
+            android:configChanges="orientation|keyboardHidden|screenSize"
+            android:launchMode="singleTask">
+            <meta-data
+                android:name="android.app.lib_name"
+                android:value="app_core" />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

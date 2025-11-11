@@ -1,5 +1,9 @@
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
+
+#[cfg(target_os = "android")]
+use android_activity::AndroidApp;
+
 use wgpu::InstanceDescriptor;
 
 #[cfg(all(not(target_arch = "wasm32"), feature = "openxr"))]
@@ -16,6 +20,28 @@ use winit::{
     event::WindowEvent,
     window::{Theme, Window},
 };
+
+#[cfg(target_os = "android")]
+use winit::platform::android::EventLoopBuilderExtAndroid;
+
+#[cfg(target_os = "android")]
+#[unsafe(no_mangle)]
+fn android_main(app: AndroidApp) {
+    android_logger::init_once(
+        android_logger::Config::default().with_max_level(log::LevelFilter::Info),
+    );
+
+    let event_loop = winit::event_loop::EventLoop::builder()
+        .with_android_app(app)
+        .build()
+        .expect("Failed to create event loop!");
+
+    event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
+    let mut application = App::default();
+    event_loop
+        .run_app(&mut application)
+        .expect("Failed to run app!");
+}
 
 #[derive(Default)]
 pub struct App {
@@ -81,6 +107,11 @@ impl ApplicationHandler for App {
             gui_context.set_pixels_per_point(window_handle.scale_factor() as f32);
         }
 
+        #[cfg(target_os = "android")]
+        {
+            gui_context.set_pixels_per_point(1.0);
+        }
+
         let viewport_id = gui_context.viewport_id();
         let gui_state = egui_winit::State::new(
             gui_context,
@@ -97,9 +128,17 @@ impl ApplicationHandler for App {
             window_handle.inner_size().height,
         );
 
-        #[cfg(not(target_arch = "wasm32"))]
+        #[cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))]
         {
             env_logger::init();
+            let renderer = pollster::block_on(async move {
+                Renderer::new(window_handle.clone(), width, height).await
+            });
+            self.renderer = Some(renderer);
+        }
+
+        #[cfg(target_os = "android")]
+        {
             let renderer = pollster::block_on(async move {
                 Renderer::new(window_handle.clone(), width, height).await
             });
@@ -172,10 +211,21 @@ impl ApplicationHandler for App {
                     event_loop.exit();
                 }
             }
-            WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
-                gui_state
-                    .egui_ctx()
-                    .set_pixels_per_point(scale_factor as f32);
+            WindowEvent::ScaleFactorChanged {
+                #[cfg(not(target_os = "android"))]
+                scale_factor,
+                ..
+            } => {
+                #[cfg(not(target_os = "android"))]
+                {
+                    gui_state
+                        .egui_ctx()
+                        .set_pixels_per_point(scale_factor as f32);
+                }
+                #[cfg(target_os = "android")]
+                {
+                    gui_state.egui_ctx().set_pixels_per_point(1.0);
+                }
             }
             WindowEvent::Resized(PhysicalSize { width, height }) => {
                 if width == 0 || height == 0 {
@@ -186,8 +236,15 @@ impl ApplicationHandler for App {
                 renderer.resize(width, height);
                 self.last_size = (width, height);
 
-                let scale_factor = window.scale_factor() as f32;
-                gui_state.egui_ctx().set_pixels_per_point(scale_factor);
+                #[cfg(not(target_os = "android"))]
+                {
+                    let scale_factor = window.scale_factor() as f32;
+                    gui_state.egui_ctx().set_pixels_per_point(scale_factor);
+                }
+                #[cfg(target_os = "android")]
+                {
+                    gui_state.egui_ctx().set_pixels_per_point(1.0);
+                }
             }
             WindowEvent::CloseRequested => {
                 log::info!("Close requested. Exiting...");
@@ -201,7 +258,7 @@ impl ApplicationHandler for App {
                 let gui_input = gui_state.take_egui_input(window);
                 gui_state.egui_ctx().begin_pass(gui_input);
 
-                #[cfg(not(target_arch = "wasm32"))]
+                #[cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))]
                 let title = "Rust/Wgpu";
 
                 #[cfg(feature = "webgpu")]
@@ -209,6 +266,9 @@ impl ApplicationHandler for App {
 
                 #[cfg(feature = "webgl")]
                 let title = "Rust/Wgpu/Webgl";
+
+                #[cfg(feature = "android")]
+                let title = "Rust/Wgpu/Android";
 
                 {
                     egui::TopBottomPanel::top("top").show(gui_state.egui_ctx(), |ui| {
@@ -287,7 +347,7 @@ impl ApplicationHandler for App {
                     }
                     egui_wgpu::ScreenDescriptor {
                         size_in_pixels: [width, height],
-                        pixels_per_point: window.scale_factor() as f32,
+                        pixels_per_point,
                     }
                 };
 
