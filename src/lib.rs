@@ -12,6 +12,12 @@ pub mod xr;
 #[cfg(all(not(target_arch = "wasm32"), feature = "openxr"))]
 pub use xr::run_xr;
 
+#[cfg(all(target_arch = "wasm32", feature = "webxr"))]
+pub mod webxr;
+
+#[cfg(all(target_arch = "wasm32", feature = "webxr"))]
+pub use webxr::init_webxr;
+
 use std::sync::Arc;
 use web_time::{Duration, Instant};
 use winit::{
@@ -307,6 +313,9 @@ impl ApplicationHandler for App {
 
                 #[cfg(feature = "webgl")]
                 let title = "Rust/Wgpu/Webgl";
+
+                #[cfg(feature = "webxr")]
+                let title = "Rust/Wgpu/WebXR";
 
                 #[cfg(feature = "android")]
                 let title = "Rust/Wgpu/Android";
@@ -630,7 +639,7 @@ impl Gpu {
                     required_limits: wgpu::Limits::default().using_resolution(adapter.limits()),
                     #[cfg(all(target_arch = "wasm32", feature = "webgpu"))]
                     required_limits: wgpu::Limits::default().using_resolution(adapter.limits()),
-                    #[cfg(all(target_arch = "wasm32", feature = "webgl"))]
+                    #[cfg(all(target_arch = "wasm32", any(feature = "webgl", feature = "webxr")))]
                     required_limits: wgpu::Limits::downlevel_webgl2_defaults()
                         .using_resolution(adapter.limits()),
                     experimental_features: wgpu::ExperimentalFeatures::disabled(),
@@ -1076,3 +1085,9 @@ fn fragment_main(in: VertexOutput) -> @location(0) vec4<f32> {
     return vec4<f32>(in.color);
 }
 ";
+
+#[cfg(all(target_arch = "wasm32", feature = "webxr"))]
+#[wasm_bindgen]
+pub async fn start_webxr_session() -> Result<(), wasm_bindgen::JsValue> {
+    init_webxr().await
+}

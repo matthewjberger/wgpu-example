@@ -32,6 +32,31 @@
                 width: 100%;
                 height: 100%;
             }
+
+            .webxr-button {
+                position: fixed;
+                bottom: 20px;
+                left: 50%;
+                transform: translateX(-50%);
+                padding: 15px 30px;
+                font-size: 18px;
+                font-weight: bold;
+                color: white;
+                background-color: #0066cc;
+                border: none;
+                border-radius: 8px;
+                cursor: pointer;
+                z-index: 1000;
+                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+            }
+
+            .webxr-button:hover {
+                background-color: #0052a3;
+            }
+
+            .webxr-button:active {
+                background-color: #003d7a;
+            }
         </style>
     </head>
 
@@ -40,6 +65,7 @@
         <div class="root">
             <canvas class="main-canvas" id="canvas"></canvas>
         </div>
+        <button id="webxr-button" class="webxr-button">Enter VR</button>
         <script>
             function resizeCanvas() {
                 const canvas = document.getElementById("canvas");
@@ -54,6 +80,59 @@
             }
             resizeCanvas();
             window.addEventListener("resize", resizeCanvas);
+
+            let wasmModule = null;
+
+            async function initWasm() {
+                if (typeof wasm_bindgen !== 'undefined') {
+                    wasmModule = wasm_bindgen;
+                    checkWebXRSupport();
+                } else {
+                    setTimeout(initWasm, 100);
+                }
+            }
+
+            async function checkWebXRSupport() {
+                const button = document.getElementById("webxr-button");
+
+                if (!wasmModule) {
+                    button.textContent = "Loading...";
+                    button.disabled = true;
+                    return;
+                }
+
+                if (!navigator.xr) {
+                    button.textContent = "WebXR Not Supported";
+                    button.disabled = true;
+                    return;
+                }
+
+                const supported = await navigator.xr.isSessionSupported("immersive-vr");
+                if (!supported) {
+                    button.textContent = "VR Not Supported";
+                    button.disabled = true;
+                    return;
+                }
+
+                button.addEventListener("click", async () => {
+                    try {
+                        button.textContent = "Starting VR...";
+                        button.disabled = true;
+
+                        await wasmModule.start_webxr_session();
+
+                        button.style.display = "none";
+                    } catch (error) {
+                        console.error("WebXR session failed:", error);
+                        button.textContent = "VR Failed - Try Again";
+                        button.disabled = false;
+                    }
+                });
+            }
+
+            window.addEventListener("load", () => {
+                setTimeout(initWasm, 500);
+            });
         </script>
     </body>
 </html>

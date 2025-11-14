@@ -61,6 +61,10 @@ run-webgl:
 run-webgpu:
     trunk serve --features webgpu --open
 
+# Serve the app with WebXR support
+run-webxr:
+    trunk serve --features webxr --open
+
 # Install Android tooling
 init-android:
     rustup target add aarch64-linux-android
