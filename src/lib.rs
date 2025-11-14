@@ -104,7 +104,7 @@ impl ApplicationHandler for App {
 
         #[cfg(target_arch = "wasm32")]
         {
-            gui_context.set_pixels_per_point(window_handle.scale_factor() as f32);
+            gui_context.set_pixels_per_point(1.0);
         }
 
         #[cfg(target_os = "android")]
@@ -182,6 +182,9 @@ impl ApplicationHandler for App {
             }
             if renderer_received {
                 self.renderer_receiver = None;
+                if let Some(window) = self.window.as_ref() {
+                    window.request_redraw();
+                }
             }
         }
 
@@ -211,18 +214,13 @@ impl ApplicationHandler for App {
                     event_loop.exit();
                 }
             }
-            WindowEvent::ScaleFactorChanged {
-                #[cfg(not(target_os = "android"))]
-                scale_factor,
-                ..
-            } => {
-                #[cfg(not(target_os = "android"))]
+            WindowEvent::ScaleFactorChanged { .. } => {
+                #[cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))]
                 {
-                    gui_state
-                        .egui_ctx()
-                        .set_pixels_per_point(scale_factor as f32);
+                    let scale_factor = window.scale_factor() as f32;
+                    gui_state.egui_ctx().set_pixels_per_point(scale_factor);
                 }
-                #[cfg(target_os = "android")]
+                #[cfg(any(target_arch = "wasm32", target_os = "android"))]
                 {
                     gui_state.egui_ctx().set_pixels_per_point(1.0);
                 }
@@ -236,12 +234,12 @@ impl ApplicationHandler for App {
                 renderer.resize(width, height);
                 self.last_size = (width, height);
 
-                #[cfg(not(target_os = "android"))]
+                #[cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))]
                 {
                     let scale_factor = window.scale_factor() as f32;
                     gui_state.egui_ctx().set_pixels_per_point(scale_factor);
                 }
-                #[cfg(target_os = "android")]
+                #[cfg(any(target_arch = "wasm32", target_os = "android"))]
                 {
                     gui_state.egui_ctx().set_pixels_per_point(1.0);
                 }
@@ -251,11 +249,54 @@ impl ApplicationHandler for App {
                 event_loop.exit();
             }
             WindowEvent::RedrawRequested => {
+                #[cfg(target_arch = "wasm32")]
+                {
+                    let canvas = wgpu::web_sys::window()
+                        .unwrap()
+                        .document()
+                        .unwrap()
+                        .get_element_by_id("canvas")
+                        .unwrap()
+                        .dyn_into::<wgpu::web_sys::HtmlCanvasElement>()
+                        .unwrap();
+                    let new_width = canvas.width();
+                    let new_height = canvas.height();
+                    if (new_width, new_height) != self.last_size && new_width > 0 && new_height > 0
+                    {
+                        log::info!("Canvas resized to: ({new_width}, {new_height})");
+                        renderer.resize(new_width, new_height);
+                        self.last_size = (new_width, new_height);
+                    }
+                }
+
                 let now = Instant::now();
                 let delta_time = now - *last_render_time;
                 *last_render_time = now;
 
+                #[cfg(target_arch = "wasm32")]
+                let mut gui_input = gui_state.take_egui_input(window);
+                #[cfg(not(target_arch = "wasm32"))]
                 let gui_input = gui_state.take_egui_input(window);
+
+                #[cfg(target_arch = "wasm32")]
+                {
+                    let canvas = wgpu::web_sys::window()
+                        .unwrap()
+                        .document()
+                        .unwrap()
+                        .get_element_by_id("canvas")
+                        .unwrap()
+                        .dyn_into::<wgpu::web_sys::HtmlCanvasElement>()
+                        .unwrap();
+                    let pixels_per_point = gui_state.egui_ctx().pixels_per_point();
+                    let canvas_size = egui::vec2(
+                        canvas.width() as f32 / pixels_per_point,
+                        canvas.height() as f32 / pixels_per_point,
+                    );
+                    gui_input.screen_rect =
+                        Some(egui::Rect::from_min_size(egui::Pos2::ZERO, canvas_size));
+                }
+
                 gui_state.egui_ctx().begin_pass(gui_input);
 
                 #[cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))]

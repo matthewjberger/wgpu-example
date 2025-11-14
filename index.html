@@ -29,6 +29,8 @@
 
             .main-canvas {
                 display: block;
+                width: 100%;
+                height: 100%;
             }
         </style>
     </head>
@@ -41,8 +43,14 @@
         <script>
             function resizeCanvas() {
                 const canvas = document.getElementById("canvas");
-                canvas.width = window.innerWidth;
-                canvas.height = window.innerHeight;
+                const dpr = window.devicePixelRatio || 1;
+                const width = window.innerWidth;
+                const height = window.innerHeight;
+
+                canvas.width = Math.round(width * dpr);
+                canvas.height = Math.round(height * dpr);
+                canvas.style.width = width + "px";
+                canvas.style.height = height + "px";
             }
             resizeCanvas();
             window.addEventListener("resize", resizeCanvas);
