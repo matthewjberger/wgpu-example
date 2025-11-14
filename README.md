@@ -9,6 +9,8 @@ It also includes an [OpenXR](https://www.khronos.org/openxr/) VR mode with hand 
 > If you're looking for a Vulkan example, check out [the vulkan-example repo](https://github.com/matthewjberger/vulkan-example)
 >
 > If you're looking for an OpenGL example, check out [the opengl-example repo](https://github.com/matthewjberger/opengl-example)
+>
+> I've also created a game engine called [Nightshade](https://matthewberger.dev/nightshade) based on this boilerplate and my [freecs](https://github.com/matthewjberger/freecs) ECS library
 
 <img width="802" height="632" alt="native" src="https://github.com/user-attachments/assets/aaad05db-8a5b-4306-a166-2692b4e365fb" />
 
