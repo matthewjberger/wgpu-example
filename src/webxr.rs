@@ -30,6 +30,7 @@ struct WebXrContext {
     session: XrSession,
     reference_space: web_sys::XrReferenceSpace,
     gl_layer: XrWebGlLayer,
+    gl_context: web_sys::WebGl2RenderingContext,
     device: wgpu::Device,
     queue: wgpu::Queue,
     scene: Scene,
@@ -47,6 +48,8 @@ struct WebXrContext {
     right_controller_position: Option<nalgebra_glm::Vec3>,
     left_trigger_value: f32,
     right_trigger_value: f32,
+    cached_render_texture: Option<(u32, u32, wgpu::Texture)>,
+    cached_depth_texture: Option<(u32, u32, wgpu::Texture)>,
 }
 
 impl WebXrContext {
@@ -54,12 +57,15 @@ impl WebXrContext {
         session: XrSession,
         reference_space: web_sys::XrReferenceSpace,
         gl_layer: XrWebGlLayer,
+        gl_context: web_sys::WebGl2RenderingContext,
     ) -> Result<Self, JsValue> {
+        log::info!("Creating wgpu instance with GL backend...");
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
             backends: wgpu::Backends::GL,
             ..Default::default()
         });
 
+        log::info!("Requesting wgpu adapter...");
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::HighPerformance,
@@ -67,8 +73,14 @@ impl WebXrContext {
                 force_fallback_adapter: false,
             })
             .await
-            .map_err(|_| JsValue::from_str("No adapter"))?;
+            .map_err(|e| {
+                log::error!("Failed to get wgpu adapter: {:?}", e);
+                JsValue::from_str(&format!("Failed to get GPU adapter: {:?}", e))
+            })?;
 
+        log::info!("wgpu adapter acquired");
+
+        log::info!("Requesting wgpu device...");
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 label: Some("WebXR Device"),
@@ -79,9 +91,14 @@ impl WebXrContext {
                 trace: wgpu::Trace::Off,
             })
             .await
-            .map_err(|e| JsValue::from_str(&format!("Device request failed: {:?}", e)))?;
+            .map_err(|e| {
+                log::error!("Device request failed: {:?}", e);
+                JsValue::from_str(&format!("GPU device creation failed: {:?}", e))
+            })?;
 
+        log::info!("wgpu device acquired, creating scene...");
         let scene = Scene::new(&device, wgpu::TextureFormat::Rgba8UnormSrgb);
+        log::info!("Scene created");
 
         let cube_vertex_buffer = wgpu::util::DeviceExt::create_buffer_init(
             &device,
@@ -276,6 +293,7 @@ impl WebXrContext {
             session,
             reference_space,
             gl_layer,
+            gl_context,
             device,
             queue,
             scene,
@@ -293,6 +311,8 @@ impl WebXrContext {
             right_controller_position: None,
             left_trigger_value: 0.0,
             right_trigger_value: 0.0,
+            cached_render_texture: None,
+            cached_depth_texture: None,
         })
     }
 
@@ -374,40 +394,79 @@ impl WebXrContext {
     ) -> Result<(), JsValue> {
         let width = viewport.width() as u32;
         let height = viewport.height() as u32;
+        let viewport_x = viewport.x() as i32;
+        let viewport_y = viewport.y() as i32;
 
-        let texture = self.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("WebXR Render Target"),
-            size: wgpu::Extent3d {
-                width,
-                height,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            view_formats: &[],
-        });
+        let framebuffer = self.gl_layer.framebuffer();
+        if framebuffer.is_none() {
+            return Err(JsValue::from_str("No WebXR framebuffer available"));
+        }
 
-        let view_texture = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let gl = &self.gl_context;
 
-        let depth_texture = self.device.create_texture(&wgpu::TextureDescriptor {
-            label: Some("WebXR Depth Texture"),
-            size: wgpu::Extent3d {
-                width,
-                height,
-                depth_or_array_layers: 1,
-            },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Depth32Float,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            view_formats: &[],
-        });
+        gl.viewport(viewport_x, viewport_y, width as i32, height as i32);
+        gl.scissor(viewport_x, viewport_y, width as i32, height as i32);
+        gl.enable(web_sys::WebGl2RenderingContext::SCISSOR_TEST);
 
-        let depth_view = depth_texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let needs_new_render_texture = self
+            .cached_render_texture
+            .as_ref()
+            .map_or(true, |(w, h, _)| *w != width || *h != height);
+
+        if needs_new_render_texture {
+            let new_texture = self.device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("WebXR Render Target"),
+                size: wgpu::Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba8UnormSrgb,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+                view_formats: &[],
+            });
+            self.cached_render_texture = Some((width, height, new_texture));
+        }
+
+        let view_texture = self
+            .cached_render_texture
+            .as_ref()
+            .unwrap()
+            .2
+            .create_view(&wgpu::TextureViewDescriptor::default());
+
+        let needs_new_depth_texture = self
+            .cached_depth_texture
+            .as_ref()
+            .map_or(true, |(w, h, _)| *w != width || *h != height);
+
+        if needs_new_depth_texture {
+            let new_texture = self.device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("WebXR Depth Texture"),
+                size: wgpu::Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Depth32Float,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                view_formats: &[],
+            });
+            self.cached_depth_texture = Some((width, height, new_texture));
+        }
+
+        let depth_view = self
+            .cached_depth_texture
+            .as_ref()
+            .unwrap()
+            .2
+            .create_view(&wgpu::TextureViewDescriptor::default());
 
         let camera_position = nalgebra_glm::vec3(0.0, 1.7, 0.0) + self.player_position;
 
@@ -572,6 +631,76 @@ impl WebXrContext {
             );
         }
 
+        self.queue.submit(std::iter::empty());
+
+        let gl = &self.gl_context;
+        let xr_framebuffer = self.gl_layer.framebuffer();
+
+        if let Some(fb) = xr_framebuffer.as_ref() {
+            gl.bind_framebuffer(web_sys::WebGl2RenderingContext::DRAW_FRAMEBUFFER, Some(fb));
+
+            let texture_ref = &self.cached_render_texture.as_ref().unwrap().2;
+            let hal_texture = unsafe {
+                texture_ref
+                    .as_hal::<wgpu_hal::gles::Api>()
+                    .ok_or_else(|| JsValue::from_str("Failed to get HAL texture"))?
+            };
+
+            let gl_texture = match &(*hal_texture).inner {
+                wgpu_hal::gles::TextureInner::Texture { raw, .. } => raw,
+                wgpu_hal::gles::TextureInner::Renderbuffer { .. } => {
+                    return Err(JsValue::from_str("Cannot blit from renderbuffer"));
+                }
+                wgpu_hal::gles::TextureInner::DefaultRenderbuffer => {
+                    return Err(JsValue::from_str("Cannot blit from default renderbuffer"));
+                }
+                wgpu_hal::gles::TextureInner::ExternalFramebuffer { .. } => {
+                    return Err(JsValue::from_str("Cannot blit from external framebuffer"));
+                }
+            };
+
+            let temp_fbo = gl
+                .create_framebuffer()
+                .ok_or_else(|| JsValue::from_str("Failed to create temporary framebuffer"))?;
+            gl.bind_framebuffer(
+                web_sys::WebGl2RenderingContext::READ_FRAMEBUFFER,
+                Some(&temp_fbo),
+            );
+
+            let gl_texture_target = web_sys::WebGl2RenderingContext::TEXTURE_2D;
+
+            let web_gl_texture = unsafe {
+                let texture_ref: &web_sys::WebGlTexture = std::mem::transmute(gl_texture);
+                texture_ref
+            };
+
+            gl.framebuffer_texture_2d(
+                web_sys::WebGl2RenderingContext::READ_FRAMEBUFFER,
+                web_sys::WebGl2RenderingContext::COLOR_ATTACHMENT0,
+                gl_texture_target,
+                Some(web_gl_texture),
+                0,
+            );
+
+            gl.blit_framebuffer(
+                0,
+                0,
+                width as i32,
+                height as i32,
+                viewport_x,
+                viewport_y,
+                viewport_x + width as i32,
+                viewport_y + height as i32,
+                web_sys::WebGl2RenderingContext::COLOR_BUFFER_BIT,
+                web_sys::WebGl2RenderingContext::LINEAR,
+            );
+
+            gl.bind_framebuffer(web_sys::WebGl2RenderingContext::READ_FRAMEBUFFER, None);
+            gl.delete_framebuffer(Some(&temp_fbo));
+        }
+
+        gl.disable(web_sys::WebGl2RenderingContext::SCISSOR_TEST);
+
         Ok(())
     }
 
@@ -700,11 +829,14 @@ pub async fn init_webxr() -> Result<(), JsValue> {
     console_log::init_with_level(log::Level::Info)
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
 
-    log::info!("Initializing WebXR");
+    log::info!("=== WebXR Initialization Started ===");
 
+    log::info!("Getting window and navigator...");
     let window = web_sys::window().ok_or_else(|| JsValue::from_str("No window"))?;
     let navigator = window.navigator();
     let xr = navigator.xr();
+
+    log::info!("XR object obtained, checking support...");
 
     let session_mode = XrSessionMode::ImmersiveVr;
 
@@ -720,13 +852,33 @@ pub async fn init_webxr() -> Result<(), JsValue> {
 
     log::info!("WebXR immersive-vr is supported");
 
+    log::info!("Requesting XR session (must be from user gesture)...");
     let session_init = web_sys::XrSessionInit::new();
-    let session_promise = xr.request_session_with_options(session_mode, &session_init);
-    let session: XrSession = wasm_bindgen_futures::JsFuture::from(session_promise)
-        .await?
-        .dyn_into()?;
 
-    log::info!("WebXR session created");
+    let session_promise = xr.request_session_with_options(session_mode, &session_init);
+    let session_result = wasm_bindgen_futures::JsFuture::from(session_promise).await;
+
+    let session: XrSession = match session_result {
+        Ok(session_value) => {
+            log::info!("XR session promise resolved");
+            session_value.dyn_into().map_err(|e| {
+                log::error!("Failed to cast session object: {:?}", e);
+                JsValue::from_str("Session object is not an XrSession")
+            })?
+        }
+        Err(e) => {
+            log::error!("XR session request failed: {:?}", e);
+            return Err(JsValue::from_str(&format!(
+                "Failed to create XR session. This may be due to: \
+                1) Not being called from a user gesture (button click) \
+                2) WebXR not being enabled in browser settings \
+                3) No VR device connected. Error: {:?}",
+                e
+            )));
+        }
+    };
+
+    log::info!("WebXR session created successfully");
 
     let document = window
         .document()
@@ -736,36 +888,71 @@ pub async fn init_webxr() -> Result<(), JsValue> {
         .ok_or_else(|| JsValue::from_str("No canvas element"))?
         .dyn_into::<web_sys::HtmlCanvasElement>()?;
 
-    let gl_context = canvas
-        .get_context("webgl2")?
-        .ok_or_else(|| JsValue::from_str("No WebGL2 context"))?
-        .dyn_into::<web_sys::WebGl2RenderingContext>()?;
+    let gl_context = {
+        use wasm_bindgen::JsCast;
 
-    let make_xr_compatible = gl_context.make_xr_compatible();
-    wasm_bindgen_futures::JsFuture::from(make_xr_compatible).await?;
+        let context_options = js_sys::Object::new();
+        js_sys::Reflect::set(&context_options, &"xrCompatible".into(), &true.into())?;
 
+        let context_result = canvas.get_context_with_context_options("webgl2", &context_options)?;
+
+        if let Some(context) = context_result {
+            log::info!("Got WebGL2 context with xrCompatible");
+            context.dyn_into::<web_sys::WebGl2RenderingContext>()?
+        } else {
+            log::warn!("Failed to get xrCompatible context, trying fallback...");
+            let fallback_context = canvas
+                .get_context("webgl2")?
+                .ok_or_else(|| JsValue::from_str("Failed to get WebGL2 context"))?
+                .dyn_into::<web_sys::WebGl2RenderingContext>()?;
+
+            log::info!("Making existing context XR compatible...");
+            let make_xr_compatible = fallback_context.make_xr_compatible();
+            wasm_bindgen_futures::JsFuture::from(make_xr_compatible).await?;
+
+            fallback_context
+        }
+    };
+
+    log::info!("Requesting reference space (local-floor)...");
     let reference_space_promise = session.request_reference_space(XrReferenceSpaceType::LocalFloor);
     let reference_space: web_sys::XrReferenceSpace =
         wasm_bindgen_futures::JsFuture::from(reference_space_promise)
-            .await?
+            .await
+            .map_err(|e| {
+                log::error!("Failed to get reference space: {:?}", e);
+                JsValue::from_str("Failed to get local-floor reference space")
+            })?
             .dyn_into()?;
 
+    log::info!("Reference space acquired");
+
+    log::info!("Creating XR WebGL layer...");
     let xr_layer_init = web_sys::XrWebGlLayerInit::new();
     let xr_layer = XrWebGlLayer::new_with_web_gl2_rendering_context_and_layer_init(
         &session,
         &gl_context,
         &xr_layer_init,
-    )?;
+    )
+    .map_err(|e| {
+        log::error!("Failed to create XR WebGL layer: {:?}", e);
+        e
+    })?;
 
+    log::info!("XR WebGL layer created");
+
+    log::info!("Updating render state...");
     let render_state_init = web_sys::XrRenderStateInit::new();
     render_state_init.set_base_layer(Some(&xr_layer));
     session.update_render_state_with_state(&render_state_init);
 
     log::info!("WebXR render state configured");
 
+    log::info!("Creating WebXR context...");
     let context = Rc::new(RefCell::new(
-        WebXrContext::new(session.clone(), reference_space, xr_layer).await?,
+        WebXrContext::new(session.clone(), reference_space, xr_layer, gl_context).await?,
     ));
+    log::info!("WebXR context created successfully");
 
     let animation_frame_closure: Rc<RefCell<Option<Closure<dyn FnMut(f64, web_sys::XrFrame)>>>> =
         Rc::new(RefCell::new(None));

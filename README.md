@@ -50,11 +50,19 @@ just build-steamdeck
 just deploy-steamdeck
 ```
 
-### OpenXR VR Mode
+### OpenXR VR Mode (Desktop Native)
 
 ```bash
 just run-openxr
 ```
+
+### WebXR VR Mode (Browser-based)
+
+```bash
+just run-webxr-tunnel
+```
+
+For detailed WebXR setup instructions, see [WEBXR.md](WEBXR.md).
 
 ## OpenXR VR Mode
 
@@ -67,6 +75,52 @@ The OpenXR VR mode renders a spinning triangle, infinite grid, and procedural sk
 3. Start Virtual Desktop and stream your desktop to your VR headset
 4. On your desktop, run `just run-openxr`
 5. The application will appear in VR
+
+## WebXR VR Mode
+
+WebXR enables VR experiences directly in the browser without installing native apps. This works on Meta Quest, Pico, and other standalone VR headsets.
+
+### Quick Start (Easiest Method)
+
+1. Install cloudflared (one-time):
+   ```bash
+   just init-webxr-tunnel
+   ```
+
+2. Run with tunnel:
+   ```bash
+   just run-webxr-tunnel
+   ```
+
+3. Open the displayed HTTPS URL in your VR headset's browser
+4. Click "Enter VR" button
+
+### Alternative Methods
+
+See [WEBXR.md](WEBXR.md) for:
+- Local HTTPS setup with mkcert
+- Network access configuration
+- Meta Quest developer mode
+- Troubleshooting guide
+
+### Available Commands
+
+```bash
+# Local development (localhost only)
+just run-webxr
+
+# Easiest for headset access (automatic HTTPS tunnel)
+just run-webxr-tunnel
+
+# Network access without HTTPS (won't work for WebXR)
+just run-webxr-network
+
+# HTTPS with custom certificates
+just run-webxr-https cert.pem key.pem
+
+# Show your local IP address
+just webxr-ip
+```
 
 ## Prerequisites (web)
 

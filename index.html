@@ -66,6 +66,9 @@
             <canvas class="main-canvas" id="canvas"></canvas>
         </div>
         <button id="webxr-button" class="webxr-button">Enter VR</button>
+        <div id="debug-info" style="position: fixed; top: 10px; left: 10px; background: rgba(0,0,0,0.8); color: #0f0; padding: 10px; font-family: monospace; font-size: 12px; max-width: 400px; z-index: 2000;">
+            Loading debug info...
+        </div>
         <script>
             function resizeCanvas() {
                 const canvas = document.getElementById("canvas");
@@ -82,57 +85,134 @@
             window.addEventListener("resize", resizeCanvas);
 
             let wasmModule = null;
+            let initialized = false;
+            const debugInfo = document.getElementById("debug-info");
+
+            function updateDebug(msg) {
+                debugInfo.innerHTML += "<br>" + msg;
+                console.log(msg);
+            }
 
             async function initWasm() {
-                if (typeof wasm_bindgen !== 'undefined') {
-                    wasmModule = wasm_bindgen;
+                if (initialized) {
+                    updateDebug("Already initialized, skipping");
+                    return;
+                }
+
+                if (window.wasmBindings) {
+                    initialized = true;
+                    updateDebug("✓ WASM bindings found");
+                    wasmModule = window.wasmBindings;
                     checkWebXRSupport();
                 } else {
+                    updateDebug("⏳ Waiting for WASM...");
                     setTimeout(initWasm, 100);
                 }
             }
 
             async function checkWebXRSupport() {
                 const button = document.getElementById("webxr-button");
+                updateDebug("Checking WebXR support...");
 
                 if (!wasmModule) {
+                    updateDebug("✗ WASM module not loaded");
                     button.textContent = "Loading...";
                     button.disabled = true;
                     return;
                 }
 
+                updateDebug("✓ WASM module loaded");
+                updateDebug("start_webxr_session: " + (typeof wasmModule.start_webxr_session));
+
                 if (!navigator.xr) {
+                    updateDebug("✗ navigator.xr not available");
                     button.textContent = "WebXR Not Supported";
                     button.disabled = true;
                     return;
                 }
 
-                const supported = await navigator.xr.isSessionSupported("immersive-vr");
-                if (!supported) {
-                    button.textContent = "VR Not Supported";
-                    button.disabled = true;
-                    return;
-                }
+                updateDebug("✓ navigator.xr available");
 
-                button.addEventListener("click", async () => {
-                    try {
-                        button.textContent = "Starting VR...";
+                try {
+                    updateDebug("Checking immersive-vr support...");
+                    const supported = await navigator.xr.isSessionSupported("immersive-vr");
+                    updateDebug("immersive-vr supported: " + supported);
+
+                    if (!supported) {
+                        updateDebug("✗ VR not supported");
+                        button.textContent = "VR Not Supported";
                         button.disabled = true;
-
-                        await wasmModule.start_webxr_session();
-
-                        button.style.display = "none";
-                    } catch (error) {
-                        console.error("WebXR session failed:", error);
-                        button.textContent = "VR Failed - Try Again";
-                        button.disabled = false;
+                        return;
                     }
-                });
+
+                    updateDebug("✓ WebXR supported! Adding click handler...");
+                    let clickCount = 0;
+                    button.addEventListener("click", async () => {
+                        clickCount++;
+                        updateDebug("🖱️ Button clicked! (count: " + clickCount + ")");
+                        try {
+                            updateDebug("Starting VR session...");
+                            button.textContent = "Requesting session...";
+                            button.disabled = true;
+
+                            setTimeout(() => {
+                                if (button.textContent === "Requesting session...") {
+                                    button.textContent = "Creating context...";
+                                    updateDebug("⏳ Still waiting (creating context)...");
+                                }
+                            }, 1000);
+
+                            setTimeout(() => {
+                                if (button.textContent === "Creating context...") {
+                                    button.textContent = "Initializing GPU...";
+                                    updateDebug("⏳ Still waiting (initializing GPU)...");
+                                }
+                            }, 3000);
+
+                            setTimeout(() => {
+                                if (button.textContent === "Initializing GPU...") {
+                                    button.textContent = "Still loading...";
+                                    updateDebug("⏳ This is taking a while...");
+                                }
+                            }, 6000);
+
+                            updateDebug("Calling start_webxr_session()...");
+                            await wasmModule.start_webxr_session();
+
+                            updateDebug("✓ VR session started!");
+                            button.style.display = "none";
+                        } catch (error) {
+                            updateDebug("✗ ERROR: " + error.message);
+                            console.error("WebXR session failed:", error);
+                            console.error("Error details:", error.message, error.stack);
+                            const errorMsg = error.message || error.toString();
+                            button.textContent = errorMsg.length > 50 ? errorMsg.substring(0, 47) + "..." : errorMsg;
+                            button.disabled = false;
+                            setTimeout(() => {
+                                button.textContent = "Enter VR (retry)";
+                                button.disabled = false;
+                            }, 3000);
+                        }
+                    });
+                } catch (error) {
+                    updateDebug("✗ ERROR checking support: " + error.message);
+                    console.error("Error checking WebXR support:", error);
+                    button.textContent = "Error: " + error.message;
+                    button.disabled = true;
+                }
             }
 
-            window.addEventListener("load", () => {
-                setTimeout(initWasm, 500);
+            window.addEventListener("TrunkApplicationStarted", () => {
+                updateDebug("WASM loaded event received");
+                initWasm();
             });
+
+            if (window.wasmBindings) {
+                updateDebug("WASM already loaded at script execution");
+                initWasm();
+            } else {
+                updateDebug("Waiting for TrunkApplicationStarted event...");
+            }
         </script>
     </body>
 </html>

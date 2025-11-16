@@ -61,9 +61,110 @@ run-webgl:
 run-webgpu:
     trunk serve --features webgpu --open
 
-# Serve the app with WebXR support
+# Serve the app with WebXR support (localhost only)
 run-webxr:
     trunk serve --features webxr --open
+
+# Serve WebXR on all network interfaces (requires HTTPS for WebXR)
+run-webxr-network:
+    trunk serve --features webxr --address 0.0.0.0 --port 8080
+
+# Install cloudflared for WebXR tunnel
+[windows]
+init-webxr-tunnel:
+    @Write-Host "Installing cloudflared..." -ForegroundColor Green
+    -@winget install Cloudflare.cloudflared 2>&1 | Out-Null; if ($LASTEXITCODE -eq 0) { Write-Host "Installation successful!" -ForegroundColor Green } else { Write-Host "cloudflared may already be installed. If not, run: winget install Cloudflare.cloudflared" -ForegroundColor Yellow }
+    @Write-Host ""
+    @Write-Host "Note: You may need to restart your terminal for cloudflared to be in your PATH" -ForegroundColor Cyan
+    @Write-Host "Then run: just run-webxr-tunnel" -ForegroundColor Green
+
+[unix]
+init-webxr-tunnel:
+    @echo "Install cloudflared from: https://github.com/cloudflare/cloudflared/releases"
+    @echo "Or use your package manager:"
+    @echo "  - macOS: brew install cloudflared"
+    @echo "  - Linux: Check the releases page for your distribution"
+
+# Install mkcert for local HTTPS certificates
+[windows]
+init-webxr-https:
+    @echo "Installing mkcert..."
+    @echo "Choose one method:"
+    @echo ""
+    @echo "Option 1 - Chocolatey:"
+    @echo "  choco install mkcert"
+    @echo ""
+    @echo "Option 2 - Scoop:"
+    @echo "  scoop bucket add extras"
+    @echo "  scoop install mkcert"
+    @echo ""
+    @echo "Option 3 - Manual:"
+    @echo "  Download from: https://github.com/FiloSottile/mkcert/releases"
+    @echo ""
+    @echo "After installing, run: mkcert -install"
+
+[unix]
+init-webxr-https:
+    @echo "Installing mkcert..."
+    @echo "Visit: https://github.com/FiloSottile/mkcert"
+    @echo "Then run: mkcert -install && mkcert localhost YOUR_IP"
+
+# Serve WebXR with HTTPS using custom cert (set TRUNK_SERVE_TLS_CERT and TRUNK_SERVE_TLS_KEY)
+run-webxr-https cert key:
+    trunk serve --features webxr --address 0.0.0.0 --port 8443 --tls-cert {{cert}} --tls-key {{key}}
+
+# Show local IP address for WebXR headset access
+webxr-ip:
+    @echo "Access from VR headset at one of these addresses:"
+    @echo "(Note: WebXR requires HTTPS except for localhost)"
+    @ipconfig | findstr "IPv4" || true
+
+# Serve WebXR with Cloudflare Tunnel (easiest method for headset access)
+[windows]
+run-webxr-tunnel:
+    @Write-Host "Starting WebXR server with Cloudflare Tunnel..." -ForegroundColor Green
+    @Write-Host ""
+    @Write-Host "This will:"
+    @Write-Host "  1. Start the dev server"
+    @Write-Host "  2. Create a temporary HTTPS tunnel"
+    @Write-Host "  3. Give you a URL to use in your VR headset"
+    @Write-Host ""
+    @if (!(Get-Command cloudflared -ErrorAction SilentlyContinue)) { Write-Host "ERROR: cloudflared not found!" -ForegroundColor Red; Write-Host ""; Write-Host "Install it with:"; Write-Host "  winget install Cloudflare.cloudflared"; Write-Host ""; exit 1 }
+    @Write-Host "Starting dev server in background..." -ForegroundColor Yellow
+    @Start-Process -NoNewWindow trunk -ArgumentList "serve","--features","webxr","--address","0.0.0.0","--port","8080"
+    @Write-Host "Waiting for server to start..." -ForegroundColor Yellow
+    @Start-Sleep -Seconds 8
+    @Write-Host ""
+    @Write-Host "Creating tunnel (Press Ctrl+C to stop)..." -ForegroundColor Green
+    @Write-Host ""
+    cloudflared tunnel --url http://localhost:8080
+
+[unix]
+run-webxr-tunnel:
+    #!/usr/bin/env bash
+    set -e
+    echo "Starting WebXR server with Cloudflare Tunnel..."
+    echo ""
+    echo "This will:"
+    echo "  1. Start the dev server"
+    echo "  2. Create a temporary HTTPS tunnel"
+    echo "  3. Give you a URL to use in your VR headset"
+    echo ""
+    if ! command -v cloudflared &> /dev/null; then
+        echo "ERROR: cloudflared not found!"
+        echo ""
+        echo "Install it from: https://github.com/cloudflare/cloudflared/releases"
+        echo ""
+        exit 1
+    fi
+    echo "Starting dev server in background..."
+    trunk serve --features webxr --address 0.0.0.0 --port 8080 &
+    SERVER_PID=$!
+    sleep 5
+    echo ""
+    echo "Creating tunnel (Press Ctrl+C to stop)..."
+    echo ""
+    cloudflared tunnel --url http://localhost:8080 || kill $SERVER_PID
 
 # Install Android tooling
 init-android:
