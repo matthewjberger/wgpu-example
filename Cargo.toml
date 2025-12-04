@@ -11,10 +11,10 @@ name = "app_core"
 
 [dependencies]
 bytemuck = { version = "1.24.0", features = ["derive"] }
-egui = "0.33.0"
-egui-wgpu = { version = "0.33.0", features = ["winit"] }
+egui = "0.33.2"
+egui-wgpu = { version = "0.33.2", features = ["winit"] }
 futures = "0.3.31"
-log = "0.4.28"
+log = "0.4.29"
 nalgebra-glm = { version = "0.20.0", features = [
     "convert-bytemuck",
     "serde-serialize",
@@ -27,7 +27,7 @@ winit = "0.30.12"
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 ash = { version = "0.38", optional = true }
 env_logger = "0.11.8"
-egui-winit = "0.33.0"
+egui-winit = "0.33.2"
 gpu-allocator = { version = "0.27", optional = true }
 pollster = "0.4.0"
 wgpu-hal = { version = "27.0.4", optional = true }
@@ -35,14 +35,14 @@ wgpu-hal = { version = "27.0.4", optional = true }
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 console_error_panic_hook = "0.1.7"
 console_log = "1.0.0"
-egui-winit = { version = "0.33.0", default-features = false }
-wasm-bindgen = "0.2.105"
-wasm-bindgen-futures = "0.4.55"
+egui-winit = { version = "0.33.2", default-features = false }
+wasm-bindgen = "0.2.106"
+wasm-bindgen-futures = "0.4.56"
 
 [target.'cfg(target_os = "android")'.dependencies]
 android-activity = { version = "0.6", features = ["native-activity"] }
 android_logger = "0.14"
-egui-winit = { version = "0.33.0", default-features = false }
+egui-winit = { version = "0.33.2", default-features = false }
 ndk-sys = "0.6"
 
 [features]
