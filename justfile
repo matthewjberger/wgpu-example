@@ -69,9 +69,13 @@ init-android:
     rustup target add x86_64-linux-android
     cargo install --locked xbuild
 
-# Connect to Android device via wireless ADB (provide IP and port)
-connect-android ip port="5555":
-    adb connect {{ip}}:{{port}}
+# Pair with Android device for wireless debugging (provide IP:port from pairing screen)
+pair-android address:
+    adb pair {{address}}
+
+# Connect to Android device via wireless ADB (provide IP:port)
+connect-android address:
+    adb connect {{address}}
 
 # List connected Android devices
 list-android:

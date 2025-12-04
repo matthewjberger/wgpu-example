@@ -86,7 +86,7 @@ The OpenXR VR mode renders a spinning triangle, infinite grid, and procedural sk
    ```
    This installs the Android Rust toolchains and xbuild.
 
-2. Connect your Android device via USB and enable USB debugging, or start an Android emulator.
+2. Connect your Android device via USB and enable USB debugging, or connect wirelessly (see below).
 
 3. Find your device ID:
    ```bash
@@ -104,6 +104,34 @@ The OpenXR VR mode renders a spinning triangle, infinite grid, and procedural sk
    ```
    Example: `just run-android RFCY61DZZKT`
 
+### Wireless Debugging Setup
+
+To connect to your Android device wirelessly:
+
+1. On your Android device, go to **Settings > About phone** and tap **Build number** 7 times to enable Developer options.
+
+2. If your device has an auto-blocker setting (common on Samsung devices), disable it in **Settings > Security > Auto Blocker**.
+
+3. Go to **Settings > Developer options** and enable **Wireless debugging**.
+
+4. Tap on **Wireless debugging**, then tap **Pair device with pairing code**. Note the IP address and port shown (e.g., `192.168.1.100:37000`).
+
+5. On your computer, pair with the device:
+   ```bash
+   just pair-android 192.168.1.100:37000
+   ```
+   Enter the pairing code when prompted.
+
+6. List devices to get the device ID:
+   ```bash
+   just list-android
+   ```
+
+7. Run the app:
+   ```bash
+   just run-android DEVICE_ID
+   ```
+
 ### Additional Android Commands
 
 ```bash
@@ -117,7 +145,7 @@ just build-android-all
 just install-android DEVICE_ID
 
 # Connect to device over wireless ADB
-just connect-android 192.168.1.100
+just connect-android 192.168.1.100:5555
 
 # List all connected devices
 just list-android
