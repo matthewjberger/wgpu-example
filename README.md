@@ -10,6 +10,11 @@ A cross-platform [Rust](https://www.rust-lang.org/) graphics demo using [wgpu](h
 
 <img width="802" height="632" alt="native" src="https://github.com/user-attachments/assets/aaad05db-8a5b-4306-a166-2692b4e365fb" />
 
+Other languages (experimental):
+- [wgpu-example-odin](https://github.com/matthewjberger/wgpu-example-odin)
+- [wgpu-example-c](https://github.com/matthewjberger/wgpu-example-c)
+- [wgpu-example-zig](https://github.com/matthewjberger/wgpu-example-zig)
+
 ## Quickstart
 
 | Platform | Command |
