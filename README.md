@@ -3,9 +3,9 @@
 A cross-platform [Rust](https://www.rust-lang.org/) graphics demo using [wgpu](https://wgpu.rs/) to render a spinning triangle. Supports native desktop, WebGL/WebGPU ([WASM](https://webassembly.org/)), Android, Steam Deck, and [OpenXR](https://www.khronos.org/openxr/) VR with hand tracking.
 
 > **Related Projects:**
+> - [Nightshade](https://matthewberger.dev/nightshade) - Game engine based on this boilerplate
 > - [vulkan-example](https://github.com/matthewjberger/vulkan-example) - Vulkan version
 > - [opengl-example](https://github.com/matthewjberger/opengl-example) - OpenGL version
-> - [Nightshade](https://matthewberger.dev/nightshade) - Game engine based on this boilerplate
 > - [freecs](https://github.com/matthewjberger/freecs) - ECS library used by Nightshade
 
 <img width="802" height="632" alt="native" src="https://github.com/user-attachments/assets/aaad05db-8a5b-4306-a166-2692b4e365fb" />
