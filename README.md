@@ -24,7 +24,8 @@ Other languages (experimental):
 | WebGL | `trunk serve --features webgl --open` |
 | Android | `just run-android DEVICE_ID` |
 | Steam Deck | `just build-steamdeck && just deploy-steamdeck` |
-| OpenXR VR | `just run-openxr` |
+| OpenXR VR (Desktop) | `just run-openxr` |
+| OpenXR VR (Quest) | `just build-android-openxr` |
 
 ## Platform Setup
 
@@ -75,8 +76,9 @@ The build uses `--features android` which enables wgpu's Vulkan backend.
 <summary><strong>Additional Android Commands</strong></summary>
 
 ```bash
-just build-android              # Build only
+just build-android              # Build only (windowed app)
 just build-android-all          # Build for arm64 and x64
+just build-android-openxr       # Build for Meta Quest VR
 just install-android DEVICE_ID  # Install without running
 just connect-android IP:PORT    # Connect over wireless ADB
 just list-android               # List connected devices
@@ -108,15 +110,49 @@ cd ~/Downloads && ./app
 
 The `Cross.toml` file configures system libraries for graphics and windowing support.
 
-### OpenXR VR Mode
+### OpenXR VR Mode (Desktop)
 
-Renders the spinning triangle with an infinite grid, procedural skybox, and hand tracking in VR.
+Renders the spinning triangle with an infinite grid, procedural skybox, and hand tracking in VR via PCVR streaming.
 
 **Setup:**
 1. Install [SteamVR](https://store.steampowered.com/app/250820/SteamVR/)
 2. Install [Virtual Desktop](https://www.vrdesktop.net/) or another OpenXR-compatible runtime
 3. Start Virtual Desktop and stream your desktop to your VR headset
 4. Run `just run-openxr` on your desktop
+
+### OpenXR VR Mode (Meta Quest)
+
+Native standalone VR for Meta Quest 2, Quest Pro, Quest 3, and Quest 3S.
+
+**Prerequisites:**
+- All Android prerequisites (see above)
+- Meta Quest device with Developer Mode enabled
+
+**Build:**
+```bash
+just build-android-openxr
+```
+
+This produces an APK at `target/x/release/android/app.apk`.
+
+**Install on Quest:**
+```bash
+adb install -r target/x/release/android/app.apk
+```
+
+Or use [SideQuest](https://sidequestvr.com) to drag and drop the APK onto your Quest.
+
+The app appears in your Quest library under "Unknown Sources".
+
+<details>
+<summary><strong>Technical Notes</strong></summary>
+
+- Uses the `android-openxr` feature which combines `android` and `openxr` features
+- Bundles Meta's OpenXR loader from `libs/arm64-v8a/libopenxr_loader.so`
+- Manifest includes `com.oculus.intent.category.VR` for proper VR app handling
+- Supports Quest hand tracking and controller input
+- Requires `manifest.yaml` with `runtime_libs` configuration for library bundling
+</details>
 
 ## Screenshots
 

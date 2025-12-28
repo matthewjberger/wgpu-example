@@ -107,6 +107,10 @@ build-android-all:
     x build --release --platform android --arch x64 --features android
     Copy-Item -Force target/x/release/android/x64/cargo/x86_64-linux-android/release/libapp_core.so target/x/release/android/x64/cargo/x86_64-linux-android/release/libapp.so
 
+# Build the app for Android with OpenXR (arm64) for Meta Quest
+build-android-openxr:
+    x build --release --platform android --arch arm64 --features android-openxr
+
 # Install the app on connected Android device
 install-android device:
     x build --release --arch arm64 --features android --device adb:{{device}}

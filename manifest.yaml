@@ -1,0 +1,27 @@
+android:
+  runtime_libs:
+    - libs
+  manifest:
+    package: com.example.wgpu_android_xr
+    uses_feature:
+      - name: android.hardware.vulkan.level
+        required: true
+        version: 1
+    application:
+      meta_data:
+        - name: com.oculus.supportedDevices
+          value: quest2|questpro|quest3|quest3s
+      activities:
+        - name: android.app.NativeActivity
+          exported: true
+          orientation: landscape
+          config_changes: "orientation|keyboardHidden|screenSize|screenLayout|uiMode|density"
+          meta_data:
+            - name: android.app.lib_name
+              value: app
+          intent_filters:
+            - actions:
+                - android.intent.action.MAIN
+              categories:
+                - android.intent.category.LAUNCHER
+                - com.oculus.intent.category.VR

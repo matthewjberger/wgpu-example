@@ -48,8 +48,6 @@ pub struct XrContext {
     _views: Vec<xr::ViewConfigurationView>,
     action_set: xr::ActionSet,
     move_action: xr::Action<xr::Vector2f>,
-    left_hand_action: xr::Action<xr::Posef>,
-    right_hand_action: xr::Action<xr::Posef>,
     left_trigger_action: xr::Action<f32>,
     right_trigger_action: xr::Action<f32>,
     left_hand_space: xr::Space,
@@ -64,14 +62,23 @@ pub struct XrContext {
     sky_uniform_buffer: wgpu::Buffer,
     sky_bind_group: wgpu::BindGroup,
     sky_pipeline: wgpu::RenderPipeline,
+    session_running: bool,
 }
 
 impl XrContext {
     pub fn new() -> Result<(Self, wgpu::Device, wgpu::Queue), Box<dyn std::error::Error>> {
-        let xr_entry = xr::Entry::linked();
+        let xr_entry = unsafe { xr::Entry::load()? };
+
+        #[cfg(target_os = "android")]
+        xr_entry.initialize_android_loader()?;
 
         let mut required_extensions = xr::ExtensionSet::default();
         required_extensions.khr_vulkan_enable2 = true;
+
+        #[cfg(target_os = "android")]
+        {
+            required_extensions.khr_android_create_instance = true;
+        }
 
         let xr_instance = xr_entry.create_instance(
             &xr::ApplicationInfo {
@@ -596,8 +603,6 @@ impl XrContext {
                 _views: views,
                 action_set,
                 move_action,
-                left_hand_action,
-                right_hand_action,
                 left_trigger_action,
                 right_trigger_action,
                 left_hand_space,
@@ -612,6 +617,7 @@ impl XrContext {
                 sky_uniform_buffer,
                 sky_bind_group,
                 sky_pipeline,
+                session_running: false,
             },
             wgpu_device,
             wgpu_queue,
@@ -628,13 +634,16 @@ impl XrContext {
                         xr::SessionState::READY => {
                             self.session
                                 .begin(xr::ViewConfigurationType::PRIMARY_STEREO)?;
+                            self.session_running = true;
                             log::info!("XR Session started");
                         }
                         xr::SessionState::STOPPING => {
+                            self.session_running = false;
                             self.session.end()?;
                             log::info!("XR Session ended");
                         }
                         xr::SessionState::EXITING | xr::SessionState::LOSS_PENDING => {
+                            self.session_running = false;
                             log::info!("XR Session exiting");
                             return Ok(false);
                         }
@@ -649,6 +658,10 @@ impl XrContext {
             }
         }
         Ok(true)
+    }
+
+    pub fn is_session_running(&self) -> bool {
+        self.session_running
     }
 
     pub fn wait_frame(&mut self) -> Result<xr::FrameState, Box<dyn std::error::Error>> {
@@ -1200,6 +1213,7 @@ impl XrContext {
 }
 
 pub fn run_xr() -> Result<(), Box<dyn std::error::Error>> {
+    #[cfg(not(target_os = "android"))]
     env_logger::init();
     log::info!("Initializing OpenXR mode");
 
@@ -1213,6 +1227,11 @@ pub fn run_xr() -> Result<(), Box<dyn std::error::Error>> {
         if !xr_context.poll_events()? {
             log::info!("XR session ended, exiting");
             break;
+        }
+
+        if !xr_context.is_session_running() {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+            continue;
         }
 
         let now = Instant::now();

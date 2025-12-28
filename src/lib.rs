@@ -21,10 +21,10 @@ use winit::{
     window::{Theme, Window},
 };
 
-#[cfg(target_os = "android")]
+#[cfg(all(target_os = "android", not(feature = "openxr")))]
 use winit::platform::android::EventLoopBuilderExtAndroid;
 
-#[cfg(target_os = "android")]
+#[cfg(all(target_os = "android", not(feature = "openxr")))]
 #[unsafe(no_mangle)]
 fn android_main(app: AndroidApp) {
     android_logger::init_once(
@@ -41,6 +41,31 @@ fn android_main(app: AndroidApp) {
     event_loop
         .run_app(&mut application)
         .expect("Failed to run app!");
+}
+
+#[cfg(all(target_os = "android", feature = "openxr"))]
+#[unsafe(no_mangle)]
+fn android_main(app: AndroidApp) {
+    android_logger::init_once(
+        android_logger::Config::default().with_max_level(log::LevelFilter::Info),
+    );
+
+    let handle = std::thread::spawn(|| {
+        run_xr().expect("XR session failed");
+    });
+
+    loop {
+        app.poll_events(Some(std::time::Duration::from_millis(100)), |event| {
+            if let android_activity::PollEvent::Main(android_activity::MainEvent::Destroy) = event {
+                std::process::exit(0);
+            }
+        });
+        if handle.is_finished() {
+            break;
+        }
+    }
+
+    handle.join().expect("XR thread panicked");
 }
 
 #[derive(Default)]

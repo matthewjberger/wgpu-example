@@ -19,7 +19,7 @@ nalgebra-glm = { version = "0.20.0", features = [
     "convert-bytemuck",
     "serde-serialize",
 ] }
-openxr = { version = "0.19", features = ["static", "loaded"], optional = true }
+openxr = { version = "0.19", features = ["loaded"], optional = true }
 web-time = "1.1.0"
 wgpu = { version = "27.0.1", default-features = false }
 winit = "0.30.12"
@@ -43,6 +43,7 @@ wasm-bindgen-futures = "0.4.56"
 android-activity = { version = "0.6", features = ["native-activity"] }
 android_logger = "0.15"
 egui-winit = { version = "0.33.3", default-features = false }
+ndk-context = "0.1"
 ndk-sys = "0.6"
 
 [features]
@@ -51,3 +52,4 @@ openxr = ["dep:openxr", "dep:ash", "dep:wgpu-hal", "dep:gpu-allocator"]
 webgl = ["wgpu/webgl"]
 webgpu = ["wgpu/webgpu"]
 android = ["wgpu/vulkan"]
+android-openxr = ["android", "openxr"]
