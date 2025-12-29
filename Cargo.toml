@@ -36,8 +36,46 @@ wgpu-hal = { version = "27.0.4", optional = true }
 console_error_panic_hook = "0.1.7"
 console_log = "1.0.0"
 egui-winit = { version = "0.33.3", default-features = false }
+js-sys = { version = "0.3", optional = true }
 wasm-bindgen = "0.2.106"
 wasm-bindgen-futures = "0.4.56"
+web-sys = { version = "0.3", optional = true, features = [
+    "Event",
+    "Navigator",
+    "XrSystem",
+    "XrSession",
+    "XrSessionMode",
+    "XrSessionInit",
+    "XrRenderState",
+    "XrRenderStateInit",
+    "XrFrame",
+    "XrReferenceSpace",
+    "XrReferenceSpaceType",
+    "XrViewerPose",
+    "XrView",
+    "XrViewport",
+    "XrWebGlLayer",
+    "XrWebGlLayerInit",
+    "XrRigidTransform",
+    "XrPose",
+    "XrSpace",
+    "XrInputSource",
+    "XrInputSourceArray",
+    "DomPointReadOnly",
+    "WebGlRenderingContext",
+    "WebGl2RenderingContext",
+    "WebGlBuffer",
+    "WebGlFramebuffer",
+    "WebGlProgram",
+    "WebGlShader",
+    "WebGlUniformLocation",
+    "HtmlCanvasElement",
+    "HtmlButtonElement",
+    "Window",
+    "Document",
+    "Element",
+    "CssStyleDeclaration",
+]}
 
 [target.'cfg(target_os = "android")'.dependencies]
 android-activity = { version = "0.6", features = ["native-activity"] }
@@ -51,5 +89,6 @@ default = ["wgpu/default"]
 openxr = ["dep:openxr", "dep:ash", "dep:wgpu-hal", "dep:gpu-allocator"]
 webgl = ["wgpu/webgl"]
 webgpu = ["wgpu/webgpu"]
+webxr = ["webgl", "dep:web-sys", "dep:js-sys"]
 android = ["wgpu/vulkan"]
 android-openxr = ["android", "openxr"]

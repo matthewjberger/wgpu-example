@@ -61,6 +61,14 @@ run-webgl:
 run-webgpu:
     trunk serve --features webgpu --open
 
+# Build the app with WebXR support (VR in browser)
+build-webxr:
+    $env:RUSTFLAGS="--cfg=web_sys_unstable_apis"; trunk build --features webxr
+
+# Serve the app with WebXR support (VR in browser)
+run-webxr:
+    $env:RUSTFLAGS="--cfg=web_sys_unstable_apis"; trunk serve --features webxr --open
+
 # Install Android tooling
 init-android:
     rustup target add aarch64-linux-android

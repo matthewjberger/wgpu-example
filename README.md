@@ -1,6 +1,6 @@
 # Rust / Winit / Egui / Wgpu Triangle
 
-A cross-platform [Rust](https://www.rust-lang.org/) graphics demo using [wgpu](https://wgpu.rs/) to render a spinning triangle. Supports native desktop, WebGL/WebGPU ([WASM](https://webassembly.org/)), Android, Steam Deck, and [OpenXR](https://www.khronos.org/openxr/) VR with hand tracking.
+A cross-platform [Rust](https://www.rust-lang.org/) graphics demo using [wgpu](https://wgpu.rs/) to render a spinning triangle. Supports native desktop, WebGL/WebGPU ([WASM](https://webassembly.org/)), Android, Steam Deck, [OpenXR](https://www.khronos.org/openxr/) VR with hand tracking, and [WebXR](https://immersive-web.github.io/webxr/) for browser-based VR.
 
 > **Related Projects:**
 > - [Nightshade](https://matthewberger.dev/nightshade) - Game engine based on this boilerplate
@@ -22,6 +22,7 @@ Other languages (experimental):
 | Native Desktop | `cargo run -r` |
 | WebGPU | `trunk serve --features webgpu --open` |
 | WebGL | `trunk serve --features webgl --open` |
+| WebXR (Browser VR) | `just run-webxr` |
 | Android | `just run-android DEVICE_ID` |
 | Steam Deck | `just build-steamdeck && just deploy-steamdeck` |
 | OpenXR VR (Desktop) | `just run-openxr` |
@@ -34,6 +35,35 @@ Other languages (experimental):
 **Prerequisites:** [trunk](https://trunkrs.dev/)
 
 **Browser Support:** All Chromium-based browsers (Chrome, Brave, Vivaldi) support WebGPU. Firefox supports WebGPU starting with version 141 ([announcement](https://mozillagfx.wordpress.com/2025/07/15/shipping-webgpu-on-windows-in-firefox-141/)).
+
+### WebXR (Browser VR)
+
+View the demo in VR directly in your browser using the WebXR API. Works with Quest Browser, Valve Index, and other WebXR-capable browsers.
+
+**Prerequisites:**
+- [trunk](https://trunkrs.dev/)
+- A WebXR-capable browser (Quest Browser, Chrome with VR headset, etc.)
+
+**Build and serve:**
+```bash
+just run-webxr
+```
+
+**Usage:**
+1. Open the served URL in a WebXR-capable browser
+2. Click the "Enter VR" button that appears at the bottom of the screen
+3. Put on your VR headset to view the spinning triangle in VR
+
+<details>
+<summary><strong>Technical Notes</strong></summary>
+
+- Uses the `webxr` feature which enables WebGL backend + WebXR APIs
+- Requires `RUSTFLAGS="--cfg=web_sys_unstable_apis"` (handled by justfile)
+- Uses XRWebGLLayer for WebGL-based rendering
+- Renders stereo views (left/right eye) using XRViewerPose
+- For production deployment, WebXR requires HTTPS (localhost works for development)
+- The "Enter VR" button is created dynamically when WebXR support is detected
+</details>
 
 ### Android
 

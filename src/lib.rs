@@ -12,6 +12,12 @@ pub mod xr;
 #[cfg(all(not(target_arch = "wasm32"), feature = "openxr"))]
 pub use xr::run_xr;
 
+#[cfg(all(target_arch = "wasm32", feature = "webxr"))]
+pub mod webxr;
+
+#[cfg(all(target_arch = "wasm32", feature = "webxr"))]
+pub use webxr::initialize_webxr;
+
 use std::sync::Arc;
 use web_time::{Duration, Instant};
 use winit::{
@@ -184,6 +190,11 @@ impl ApplicationHandler for App {
                     log::error!("Failed to create and send renderer!");
                 }
             });
+
+            #[cfg(feature = "webxr")]
+            {
+                initialize_webxr();
+            }
         }
 
         self.gui_state = Some(gui_state);
@@ -199,11 +210,11 @@ impl ApplicationHandler for App {
         #[cfg(target_arch = "wasm32")]
         {
             let mut renderer_received = false;
-            if let Some(receiver) = self.renderer_receiver.as_mut() {
-                if let Ok(Some(renderer)) = receiver.try_recv() {
-                    self.renderer = Some(renderer);
-                    renderer_received = true;
-                }
+            if let Some(receiver) = self.renderer_receiver.as_mut()
+                && let Ok(Some(renderer)) = receiver.try_recv()
+            {
+                self.renderer = Some(renderer);
+                renderer_received = true;
             }
             if renderer_received {
                 self.renderer_receiver = None;
