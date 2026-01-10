@@ -322,10 +322,10 @@ impl XrContext {
         session.attach_action_sets(&[&action_set])?;
 
         let left_hand_space =
-            left_hand_action.create_space(session.clone(), xr::Path::NULL, xr::Posef::IDENTITY)?;
+            left_hand_action.create_space(&session, xr::Path::NULL, xr::Posef::IDENTITY)?;
 
         let right_hand_space =
-            right_hand_action.create_space(session.clone(), xr::Path::NULL, xr::Posef::IDENTITY)?;
+            right_hand_action.create_space(&session, xr::Path::NULL, xr::Posef::IDENTITY)?;
 
         let stage =
             session.create_reference_space(xr::ReferenceSpaceType::STAGE, xr::Posef::IDENTITY)?;

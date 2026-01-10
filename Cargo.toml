@@ -19,7 +19,7 @@ nalgebra-glm = { version = "0.20.0", features = [
     "convert-bytemuck",
     "serde-serialize",
 ] }
-openxr = { version = "0.19", features = ["static", "loaded"], optional = true }
+openxr = { version = "0.21", features = ["static", "loaded"], optional = true }
 web-time = "1.1.0"
 wgpu = { version = "27.0.1", default-features = false }
 winit = "0.30.12"
@@ -30,7 +30,7 @@ env_logger = "0.11.8"
 egui-winit = "0.33.3"
 gpu-allocator = { version = "0.28", optional = true }
 pollster = "0.4.0"
-wgpu-hal = { version = "27.0.4", optional = true }
+wgpu-hal = { version = "27.0.0", features = ["vulkan"], optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 console_error_panic_hook = "0.1.7"
