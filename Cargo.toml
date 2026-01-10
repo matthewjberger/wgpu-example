@@ -19,7 +19,7 @@ nalgebra-glm = { version = "0.20.0", features = [
     "convert-bytemuck",
     "serde-serialize",
 ] }
-openxr = { version = "0.19", features = ["loaded"], optional = true }
+openxr = { version = "0.19", features = ["static", "loaded"], optional = true }
 web-time = "1.1.0"
 wgpu = { version = "27.0.1", default-features = false }
 winit = "0.30.12"

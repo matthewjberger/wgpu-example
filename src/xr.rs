@@ -67,7 +67,7 @@ pub struct XrContext {
 
 impl XrContext {
     pub fn new() -> Result<(Self, wgpu::Device, wgpu::Queue), Box<dyn std::error::Error>> {
-        let xr_entry = unsafe { xr::Entry::load()? };
+        let xr_entry = xr::Entry::linked();
 
         #[cfg(target_os = "android")]
         xr_entry.initialize_android_loader()?;
