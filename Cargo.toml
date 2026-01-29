@@ -30,14 +30,14 @@ env_logger = "0.11.8"
 egui-winit = "0.33.3"
 gpu-allocator = { version = "0.28", optional = true }
 pollster = "0.4.0"
-wgpu-hal = { version = "27.0.0", features = ["vulkan"], optional = true }
+wgpu-hal = { version = "28.0.0", features = ["vulkan"], optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 console_error_panic_hook = "0.1.7"
 console_log = "1.0.0"
 egui-winit = { version = "0.33.3", default-features = false }
-wasm-bindgen = "0.2.106"
-wasm-bindgen-futures = "0.4.56"
+wasm-bindgen = "0.2.108"
+wasm-bindgen-futures = "0.4.58"
 
 [target.'cfg(target_os = "android")'.dependencies]
 android-activity = { version = "0.6", features = ["native-activity"] }
