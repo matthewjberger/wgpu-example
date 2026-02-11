@@ -10,7 +10,7 @@ path = "src/lib.rs"
 name = "app_core"
 
 [dependencies]
-bytemuck = { version = "1.24.0", features = ["derive"] }
+bytemuck = { version = "1.25.0", features = ["derive"] }
 egui = "0.33.3"
 egui-wgpu = { version = "0.33.3", features = ["winit"] }
 futures = "0.3.31"
@@ -26,7 +26,7 @@ winit = "0.30.12"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 ash = { version = "0.38", optional = true }
-env_logger = "0.11.8"
+env_logger = "0.11.9"
 egui-winit = "0.33.3"
 gpu-allocator = { version = "0.28", optional = true }
 pollster = "0.4.0"
