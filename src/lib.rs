@@ -77,10 +77,20 @@ pub struct App {
     #[cfg(target_arch = "wasm32")]
     renderer_receiver: Option<futures::channel::oneshot::Receiver<Renderer>>,
     last_size: (u32, u32),
+    initialized: bool,
 }
 
 impl ApplicationHandler for App {
+    fn suspended(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop) {
+        self.renderer = None;
+        self.window = None;
+    }
+
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
+        if self.window.is_some() {
+            return;
+        }
+
         let mut attributes = Window::default_attributes();
 
         #[cfg(not(target_arch = "wasm32"))]
@@ -113,12 +123,9 @@ impl ApplicationHandler for App {
             return;
         };
 
-        let first_window_handle = self.window.is_none();
         let window_handle = Arc::new(window);
         self.window = Some(window_handle.clone());
-        if !first_window_handle {
-            return;
-        }
+
         let gui_context = egui::Context::default();
 
         #[cfg(not(target_arch = "wasm32"))]
@@ -134,7 +141,8 @@ impl ApplicationHandler for App {
 
         #[cfg(target_os = "android")]
         {
-            gui_context.set_pixels_per_point(1.0);
+            let scale_factor = window_handle.scale_factor() as f32;
+            gui_context.set_pixels_per_point(scale_factor);
         }
 
         let viewport_id = gui_context.viewport_id();
@@ -155,7 +163,9 @@ impl ApplicationHandler for App {
 
         #[cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))]
         {
-            env_logger::init();
+            if !self.initialized {
+                env_logger::init();
+            }
             let renderer = pollster::block_on(async move {
                 Renderer::new(window_handle.clone(), width, height).await
             });
@@ -174,8 +184,10 @@ impl ApplicationHandler for App {
         {
             let (sender, receiver) = futures::channel::oneshot::channel();
             self.renderer_receiver = Some(receiver);
-            std::panic::set_hook(Box::new(console_error_panic_hook::hook));
-            console_log::init().expect("Failed to initialize logger!");
+            if !self.initialized {
+                std::panic::set_hook(Box::new(console_error_panic_hook::hook));
+                console_log::init().expect("Failed to initialize logger!");
+            }
             log::info!("Canvas dimensions: ({canvas_width} x {canvas_height})");
             wasm_bindgen_futures::spawn_local(async move {
                 let renderer =
@@ -188,6 +200,7 @@ impl ApplicationHandler for App {
 
         self.gui_state = Some(gui_state);
         self.last_render_time = Some(Instant::now());
+        self.initialized = true;
     }
 
     fn window_event(
@@ -240,12 +253,12 @@ impl ApplicationHandler for App {
                 }
             }
             WindowEvent::ScaleFactorChanged { .. } => {
-                #[cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))]
+                #[cfg(not(target_arch = "wasm32"))]
                 {
                     let scale_factor = window.scale_factor() as f32;
                     gui_state.egui_ctx().set_pixels_per_point(scale_factor);
                 }
-                #[cfg(any(target_arch = "wasm32", target_os = "android"))]
+                #[cfg(target_arch = "wasm32")]
                 {
                     gui_state.egui_ctx().set_pixels_per_point(1.0);
                 }
@@ -259,12 +272,12 @@ impl ApplicationHandler for App {
                 renderer.resize(width, height);
                 self.last_size = (width, height);
 
-                #[cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))]
+                #[cfg(not(target_arch = "wasm32"))]
                 {
                     let scale_factor = window.scale_factor() as f32;
                     gui_state.egui_ctx().set_pixels_per_point(scale_factor);
                 }
-                #[cfg(any(target_arch = "wasm32", target_os = "android"))]
+                #[cfg(target_arch = "wasm32")]
                 {
                     gui_state.egui_ctx().set_pixels_per_point(1.0);
                 }
