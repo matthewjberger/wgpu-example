@@ -138,7 +138,18 @@ impl XrContext {
             let vk_instance = xr_instance
                 .create_vulkan_instance(
                     system,
-                    std::mem::transmute(vk_entry.static_fn().get_instance_proc_addr),
+                    std::mem::transmute::<
+                        unsafe extern "system" fn(
+                            vk::Instance,
+                            *const i8,
+                        )
+                            -> Option<unsafe extern "system" fn()>,
+                        unsafe extern "system" fn(
+                            *const c_void,
+                            *const i8,
+                        )
+                            -> Option<unsafe extern "system" fn()>,
+                    >(vk_entry.static_fn().get_instance_proc_addr),
                     &vk::InstanceCreateInfo::default()
                         .application_info(&vk_app_info)
                         .enabled_extension_names(&extensions_cchar) as *const _
@@ -190,7 +201,7 @@ impl XrContext {
             .adapter
             .required_device_extensions(wgpu_features);
 
-        let device_exts = vec![ash::khr::swapchain::NAME];
+        let device_exts = [ash::khr::swapchain::NAME];
 
         let (wgpu_open_device, vk_device_ptr, queue_family_index) = {
             let extensions_cchar: Vec<_> = device_exts.iter().map(|s| s.as_ptr()).collect();
@@ -218,7 +229,18 @@ impl XrContext {
                 let vk_device = xr_instance
                     .create_vulkan_device(
                         system,
-                        std::mem::transmute(vk_entry.static_fn().get_instance_proc_addr),
+                        std::mem::transmute::<
+                            unsafe extern "system" fn(
+                                vk::Instance,
+                                *const i8,
+                            )
+                                -> Option<unsafe extern "system" fn()>,
+                            unsafe extern "system" fn(
+                                *const c_void,
+                                *const i8,
+                            )
+                                -> Option<unsafe extern "system" fn()>,
+                        >(vk_entry.static_fn().get_instance_proc_addr),
                         vk_physical_device.as_raw() as _,
                         &info as *const _ as *const _,
                     )?
@@ -234,6 +256,7 @@ impl XrContext {
                     None,
                     &enabled_extensions,
                     wgpu_features,
+                    &wgpu::Limits::default(),
                     &wgpu::MemoryHints::Performance,
                     family_info.queue_family_index,
                     0,
@@ -370,6 +393,7 @@ impl XrContext {
                             view_formats: vec![],
                         },
                         None,
+                        wgpu_hal::vulkan::TextureMemory::External,
                     )
                 };
                 let texture = unsafe {
@@ -459,8 +483,8 @@ impl XrContext {
         let grid_pipeline_layout =
             wgpu_device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Grid Pipeline Layout"),
-                bind_group_layouts: &[&grid_bind_group_layout],
-                push_constant_ranges: &[],
+                bind_group_layouts: &[Some(&grid_bind_group_layout)],
+                immediate_size: 0,
             });
 
         let grid_pipeline = wgpu_device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -500,8 +524,8 @@ impl XrContext {
             },
             depth_stencil: Some(wgpu::DepthStencilState {
                 format: wgpu::TextureFormat::Depth32Float,
-                depth_write_enabled: false,
-                depth_compare: wgpu::CompareFunction::LessEqual,
+                depth_write_enabled: Some(false),
+                depth_compare: Some(wgpu::CompareFunction::LessEqual),
                 stencil: wgpu::StencilState::default(),
                 bias: wgpu::DepthBiasState {
                     constant: 2,
@@ -510,7 +534,7 @@ impl XrContext {
                 },
             }),
             multisample: wgpu::MultisampleState::default(),
-            multiview: None,
+            multiview_mask: None,
             cache: None,
         });
 
@@ -550,8 +574,8 @@ impl XrContext {
         let sky_pipeline_layout =
             wgpu_device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Sky Pipeline Layout"),
-                bind_group_layouts: &[&sky_bind_group_layout],
-                push_constant_ranges: &[],
+                bind_group_layouts: &[Some(&sky_bind_group_layout)],
+                immediate_size: 0,
             });
 
         let sky_pipeline = wgpu_device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -581,7 +605,7 @@ impl XrContext {
             },
             depth_stencil: None,
             multisample: wgpu::MultisampleState::default(),
-            multiview: None,
+            multiview_mask: None,
             cache: None,
         });
 
@@ -878,6 +902,7 @@ impl XrContext {
                     depth_stencil_attachment: None,
                     timestamp_writes: None,
                     occlusion_query_set: None,
+                    multiview_mask: None,
                 });
 
                 render_pass.set_pipeline(&self.sky_pipeline);
@@ -922,6 +947,7 @@ impl XrContext {
                         }),
                         timestamp_writes: None,
                         occlusion_query_set: None,
+                        multiview_mask: None,
                     });
 
                 scene.render(&mut render_pass);
@@ -970,6 +996,7 @@ impl XrContext {
                     }),
                     timestamp_writes: None,
                     occlusion_query_set: None,
+                    multiview_mask: None,
                 });
 
                 render_pass.set_pipeline(&self.grid_pipeline);
@@ -982,193 +1009,193 @@ impl XrContext {
             let left_hand_location = self
                 .left_hand_space
                 .locate(&self.stage, frame_state.predicted_display_time);
-            if let Ok(location) = left_hand_location {
-                if location.location_flags.contains(
+            if let Ok(location) = left_hand_location
+                && location.location_flags.contains(
                     xr::SpaceLocationFlags::POSITION_VALID
                         | xr::SpaceLocationFlags::ORIENTATION_VALID,
-                ) {
-                    let hand_pose = location.pose;
-                    let rotation = {
-                        let o = hand_pose.orientation;
-                        let flip_x = nalgebra_glm::quat_angle_axis(
-                            180.0_f32.to_radians(),
-                            &nalgebra_glm::vec3(1.0, 0.0, 0.0),
-                        );
-                        let openxr_quat = nalgebra_glm::quat(o.w, o.z, o.y, o.x);
-                        flip_x * openxr_quat
-                    };
-                    let translation = nalgebra_glm::vec3(
-                        -hand_pose.position.x,
-                        hand_pose.position.y,
-                        -hand_pose.position.z,
+                )
+            {
+                let hand_pose = location.pose;
+                let rotation = {
+                    let o = hand_pose.orientation;
+                    let flip_x = nalgebra_glm::quat_angle_axis(
+                        180.0_f32.to_radians(),
+                        &nalgebra_glm::vec3(1.0, 0.0, 0.0),
                     );
-                    let hand_world_position = translation + self.player_position;
+                    let openxr_quat = nalgebra_glm::quat(o.w, o.z, o.y, o.x);
+                    flip_x * openxr_quat
+                };
+                let translation = nalgebra_glm::vec3(
+                    -hand_pose.position.x,
+                    hand_pose.position.y,
+                    -hand_pose.position.z,
+                );
+                let hand_world_position = translation + self.player_position;
 
-                    let rotation_matrix = nalgebra_glm::quat_to_mat4(&rotation);
-                    let translation_matrix = nalgebra_glm::translation(&hand_world_position);
-                    let hand_model = translation_matrix * rotation_matrix;
+                let rotation_matrix = nalgebra_glm::quat_to_mat4(&rotation);
+                let translation_matrix = nalgebra_glm::translation(&hand_world_position);
+                let hand_model = translation_matrix * rotation_matrix;
 
-                    let left_hand_mvp = projection_matrix * view_matrix * hand_model;
-                    scene.uniform.update_buffer(
-                        queue,
-                        0,
-                        crate::UniformBuffer { mvp: left_hand_mvp },
-                    );
+                let left_hand_mvp = projection_matrix * view_matrix * hand_model;
+                scene
+                    .uniform
+                    .update_buffer(queue, 0, crate::UniformBuffer { mvp: left_hand_mvp });
 
-                    let left_trigger_state = self
-                        .left_trigger_action
-                        .state(&self.session, xr::Path::NULL)
-                        .ok();
-                    let left_trigger_pulled = left_trigger_state
-                        .map(|s| s.current_state > 0.5)
-                        .unwrap_or(false);
-                    let left_cube_buffer = if left_trigger_pulled {
-                        &self.green_cube_vertex_buffer
-                    } else {
-                        &self.cube_vertex_buffer
-                    };
+                let left_trigger_state = self
+                    .left_trigger_action
+                    .state(&self.session, xr::Path::NULL)
+                    .ok();
+                let left_trigger_pulled = left_trigger_state
+                    .map(|s| s.current_state > 0.5)
+                    .unwrap_or(false);
+                let left_cube_buffer = if left_trigger_pulled {
+                    &self.green_cube_vertex_buffer
+                } else {
+                    &self.cube_vertex_buffer
+                };
 
-                    let mut left_hand_encoder =
-                        device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                            label: Some("Left Hand Encoder"),
-                        });
+                let mut left_hand_encoder =
+                    device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                        label: Some("Left Hand Encoder"),
+                    });
 
-                    {
-                        let mut render_pass =
-                            left_hand_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                                label: Some("Left Hand Render Pass"),
-                                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                                    view: &view_texture_view,
-                                    resolve_target: None,
-                                    ops: wgpu::Operations {
+                {
+                    let mut render_pass =
+                        left_hand_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                            label: Some("Left Hand Render Pass"),
+                            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                                view: &view_texture_view,
+                                resolve_target: None,
+                                ops: wgpu::Operations {
+                                    load: wgpu::LoadOp::Load,
+                                    store: wgpu::StoreOp::Store,
+                                },
+                                depth_slice: None,
+                            })],
+                            depth_stencil_attachment: Some(
+                                wgpu::RenderPassDepthStencilAttachment {
+                                    view: &depth_view,
+                                    depth_ops: Some(wgpu::Operations {
                                         load: wgpu::LoadOp::Load,
                                         store: wgpu::StoreOp::Store,
-                                    },
-                                    depth_slice: None,
-                                })],
-                                depth_stencil_attachment: Some(
-                                    wgpu::RenderPassDepthStencilAttachment {
-                                        view: &depth_view,
-                                        depth_ops: Some(wgpu::Operations {
-                                            load: wgpu::LoadOp::Load,
-                                            store: wgpu::StoreOp::Store,
-                                        }),
-                                        stencil_ops: None,
-                                    },
-                                ),
-                                timestamp_writes: None,
-                                occlusion_query_set: None,
-                            });
+                                    }),
+                                    stencil_ops: None,
+                                },
+                            ),
+                            timestamp_writes: None,
+                            occlusion_query_set: None,
+                            multiview_mask: None,
+                        });
 
-                        render_pass.set_pipeline(&scene.pipeline);
-                        render_pass.set_bind_group(0, &scene.uniform.bind_group, &[]);
-                        render_pass.set_vertex_buffer(0, left_cube_buffer.slice(..));
-                        render_pass.set_index_buffer(
-                            self.cube_index_buffer.slice(..),
-                            wgpu::IndexFormat::Uint32,
-                        );
-                        render_pass.draw_indexed(0..36, 0, 0..1);
-                    }
-
-                    queue.submit(std::iter::once(left_hand_encoder.finish()));
+                    render_pass.set_pipeline(&scene.pipeline);
+                    render_pass.set_bind_group(0, &scene.uniform.bind_group, &[]);
+                    render_pass.set_vertex_buffer(0, left_cube_buffer.slice(..));
+                    render_pass.set_index_buffer(
+                        self.cube_index_buffer.slice(..),
+                        wgpu::IndexFormat::Uint32,
+                    );
+                    render_pass.draw_indexed(0..36, 0, 0..1);
                 }
+
+                queue.submit(std::iter::once(left_hand_encoder.finish()));
             }
 
             let right_hand_location = self
                 .right_hand_space
                 .locate(&self.stage, frame_state.predicted_display_time);
-            if let Ok(location) = right_hand_location {
-                if location.location_flags.contains(
+            if let Ok(location) = right_hand_location
+                && location.location_flags.contains(
                     xr::SpaceLocationFlags::POSITION_VALID
                         | xr::SpaceLocationFlags::ORIENTATION_VALID,
-                ) {
-                    let hand_pose = location.pose;
-                    let rotation = {
-                        let o = hand_pose.orientation;
-                        let flip_x = nalgebra_glm::quat_angle_axis(
-                            180.0_f32.to_radians(),
-                            &nalgebra_glm::vec3(1.0, 0.0, 0.0),
-                        );
-                        let openxr_quat = nalgebra_glm::quat(o.w, o.z, o.y, o.x);
-                        flip_x * openxr_quat
-                    };
-                    let translation = nalgebra_glm::vec3(
-                        -hand_pose.position.x,
-                        hand_pose.position.y,
-                        -hand_pose.position.z,
+                )
+            {
+                let hand_pose = location.pose;
+                let rotation = {
+                    let o = hand_pose.orientation;
+                    let flip_x = nalgebra_glm::quat_angle_axis(
+                        180.0_f32.to_radians(),
+                        &nalgebra_glm::vec3(1.0, 0.0, 0.0),
                     );
-                    let hand_world_position = translation + self.player_position;
+                    let openxr_quat = nalgebra_glm::quat(o.w, o.z, o.y, o.x);
+                    flip_x * openxr_quat
+                };
+                let translation = nalgebra_glm::vec3(
+                    -hand_pose.position.x,
+                    hand_pose.position.y,
+                    -hand_pose.position.z,
+                );
+                let hand_world_position = translation + self.player_position;
 
-                    let rotation_matrix = nalgebra_glm::quat_to_mat4(&rotation);
-                    let translation_matrix = nalgebra_glm::translation(&hand_world_position);
-                    let hand_model = translation_matrix * rotation_matrix;
+                let rotation_matrix = nalgebra_glm::quat_to_mat4(&rotation);
+                let translation_matrix = nalgebra_glm::translation(&hand_world_position);
+                let hand_model = translation_matrix * rotation_matrix;
 
-                    let right_hand_mvp = projection_matrix * view_matrix * hand_model;
-                    scene.uniform.update_buffer(
-                        queue,
-                        0,
-                        crate::UniformBuffer {
-                            mvp: right_hand_mvp,
-                        },
-                    );
+                let right_hand_mvp = projection_matrix * view_matrix * hand_model;
+                scene.uniform.update_buffer(
+                    queue,
+                    0,
+                    crate::UniformBuffer {
+                        mvp: right_hand_mvp,
+                    },
+                );
 
-                    let right_trigger_state = self
-                        .right_trigger_action
-                        .state(&self.session, xr::Path::NULL)
-                        .ok();
-                    let right_trigger_pulled = right_trigger_state
-                        .map(|s| s.current_state > 0.5)
-                        .unwrap_or(false);
-                    let right_cube_buffer = if right_trigger_pulled {
-                        &self.green_cube_vertex_buffer
-                    } else {
-                        &self.cube_vertex_buffer
-                    };
+                let right_trigger_state = self
+                    .right_trigger_action
+                    .state(&self.session, xr::Path::NULL)
+                    .ok();
+                let right_trigger_pulled = right_trigger_state
+                    .map(|s| s.current_state > 0.5)
+                    .unwrap_or(false);
+                let right_cube_buffer = if right_trigger_pulled {
+                    &self.green_cube_vertex_buffer
+                } else {
+                    &self.cube_vertex_buffer
+                };
 
-                    let mut right_hand_encoder =
-                        device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                            label: Some("Right Hand Encoder"),
-                        });
+                let mut right_hand_encoder =
+                    device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                        label: Some("Right Hand Encoder"),
+                    });
 
-                    {
-                        let mut render_pass =
-                            right_hand_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                                label: Some("Right Hand Render Pass"),
-                                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                                    view: &view_texture_view,
-                                    resolve_target: None,
-                                    ops: wgpu::Operations {
+                {
+                    let mut render_pass =
+                        right_hand_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                            label: Some("Right Hand Render Pass"),
+                            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                                view: &view_texture_view,
+                                resolve_target: None,
+                                ops: wgpu::Operations {
+                                    load: wgpu::LoadOp::Load,
+                                    store: wgpu::StoreOp::Store,
+                                },
+                                depth_slice: None,
+                            })],
+                            depth_stencil_attachment: Some(
+                                wgpu::RenderPassDepthStencilAttachment {
+                                    view: &depth_view,
+                                    depth_ops: Some(wgpu::Operations {
                                         load: wgpu::LoadOp::Load,
                                         store: wgpu::StoreOp::Store,
-                                    },
-                                    depth_slice: None,
-                                })],
-                                depth_stencil_attachment: Some(
-                                    wgpu::RenderPassDepthStencilAttachment {
-                                        view: &depth_view,
-                                        depth_ops: Some(wgpu::Operations {
-                                            load: wgpu::LoadOp::Load,
-                                            store: wgpu::StoreOp::Store,
-                                        }),
-                                        stencil_ops: None,
-                                    },
-                                ),
-                                timestamp_writes: None,
-                                occlusion_query_set: None,
-                            });
+                                    }),
+                                    stencil_ops: None,
+                                },
+                            ),
+                            timestamp_writes: None,
+                            occlusion_query_set: None,
+                            multiview_mask: None,
+                        });
 
-                        render_pass.set_pipeline(&scene.pipeline);
-                        render_pass.set_bind_group(0, &scene.uniform.bind_group, &[]);
-                        render_pass.set_vertex_buffer(0, right_cube_buffer.slice(..));
-                        render_pass.set_index_buffer(
-                            self.cube_index_buffer.slice(..),
-                            wgpu::IndexFormat::Uint32,
-                        );
-                        render_pass.draw_indexed(0..36, 0, 0..1);
-                    }
-
-                    queue.submit(std::iter::once(right_hand_encoder.finish()));
+                    render_pass.set_pipeline(&scene.pipeline);
+                    render_pass.set_bind_group(0, &scene.uniform.bind_group, &[]);
+                    render_pass.set_vertex_buffer(0, right_cube_buffer.slice(..));
+                    render_pass.set_index_buffer(
+                        self.cube_index_buffer.slice(..),
+                        wgpu::IndexFormat::Uint32,
+                    );
+                    render_pass.draw_indexed(0..36, 0, 0..1);
                 }
+
+                queue.submit(std::iter::once(right_hand_encoder.finish()));
             }
         }
 

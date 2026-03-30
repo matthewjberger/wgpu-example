@@ -335,9 +335,13 @@ impl ApplicationHandler for App {
                         Some(egui::Rect::from_min_size(egui::Pos2::ZERO, canvas_size));
                 }
 
-                gui_state.egui_ctx().begin_pass(gui_input);
-
-                #[cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))]
+                #[cfg(all(
+                    not(target_arch = "wasm32"),
+                    not(target_os = "android"),
+                    not(feature = "webgpu"),
+                    not(feature = "webgl"),
+                    not(feature = "android")
+                ))]
                 let title = "Rust/Wgpu";
 
                 #[cfg(feature = "webgpu")]
@@ -349,8 +353,14 @@ impl ApplicationHandler for App {
                 #[cfg(feature = "android")]
                 let title = "Rust/Wgpu/Android";
 
-                {
-                    egui::TopBottomPanel::top("top").show(gui_state.egui_ctx(), |ui| {
+                let egui_winit::egui::FullOutput {
+                    textures_delta,
+                    shapes,
+                    pixels_per_point,
+                    platform_output,
+                    ..
+                } = gui_state.egui_ctx().run_ui(gui_input, |ui| {
+                    egui::Panel::top("top").show_inside(ui, |ui| {
                         ui.horizontal(|ui| {
                             egui::MenuBar::new().ui(ui, |ui| {
                                 ui.menu_button("File", |ui| {
@@ -394,26 +404,18 @@ impl ApplicationHandler for App {
                         });
                     });
 
-                    egui::SidePanel::left("left").show(gui_state.egui_ctx(), |ui| {
+                    egui::Panel::left("left").show_inside(ui, |ui| {
                         ui.heading("Scene Tree");
                     });
 
-                    egui::SidePanel::right("right").show(gui_state.egui_ctx(), |ui| {
+                    egui::Panel::right("right").show_inside(ui, |ui| {
                         ui.heading("Inspector");
                     });
 
-                    egui::TopBottomPanel::bottom("Console").show(gui_state.egui_ctx(), |ui| {
+                    egui::Panel::bottom("Console").show_inside(ui, |ui| {
                         ui.heading("Console");
                     });
-                }
-
-                let egui_winit::egui::FullOutput {
-                    textures_delta,
-                    shapes,
-                    pixels_per_point,
-                    platform_output,
-                    ..
-                } = gui_state.egui_ctx().end_pass();
+                });
 
                 gui_state.handle_platform_output(window, platform_output);
 
@@ -519,17 +521,21 @@ impl Renderer {
         );
 
         let surface_texture = match self.gpu.surface.get_current_texture() {
-            Ok(texture) => texture,
-            Err(wgpu::SurfaceError::Outdated) => {
+            wgpu::CurrentSurfaceTexture::Success(frame)
+            | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => frame,
+            wgpu::CurrentSurfaceTexture::Outdated => {
                 self.gpu
                     .surface
                     .configure(&self.gpu.device, &self.gpu.surface_config);
-                self.gpu
-                    .surface
-                    .get_current_texture()
-                    .expect("Failed to get surface texture after reconfiguration!")
+                match self.gpu.surface.get_current_texture() {
+                    wgpu::CurrentSurfaceTexture::Success(frame)
+                    | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => frame,
+                    other => {
+                        panic!("Failed to get surface texture after reconfiguration: {other:?}")
+                    }
+                }
             }
-            Err(error) => panic!("Failed to get surface texture: {:?}", error),
+            other => panic!("Failed to get surface texture: {other:?}"),
         };
 
         let surface_texture_view =
@@ -576,6 +582,7 @@ impl Renderer {
                 }),
                 timestamp_writes: None,
                 occlusion_query_set: None,
+                multiview_mask: None,
             });
             self.scene.render(&mut render_pass);
 
@@ -646,7 +653,8 @@ impl Gpu {
         width: u32,
         height: u32,
     ) -> Self {
-        let instance = wgpu::Instance::new(&InstanceDescriptor::default());
+        let instance =
+            wgpu::Instance::new(InstanceDescriptor::new_without_display_handle_from_env());
         let surface = instance.create_surface(window).unwrap();
 
         let adapter = instance
@@ -711,7 +719,8 @@ impl Gpu {
 
     #[cfg(not(target_arch = "wasm32"))]
     pub async fn new_async_headless() -> Self {
-        let instance = wgpu::Instance::new(&InstanceDescriptor::default());
+        let instance =
+            wgpu::Instance::new(InstanceDescriptor::new_without_display_handle_from_env());
 
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
@@ -757,7 +766,7 @@ impl Gpu {
             );
             instance
                 .create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {
-                    raw_display_handle: handle,
+                    raw_display_handle: Some(handle),
                     raw_window_handle: window_handle,
                 })
                 .unwrap()
@@ -854,8 +863,8 @@ impl Scene {
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: None,
-            bind_group_layouts: &[&uniform.bind_group_layout],
-            push_constant_ranges: &[],
+            bind_group_layouts: &[Some(&uniform.bind_group_layout)],
+            immediate_size: 0,
         });
 
         device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -878,8 +887,8 @@ impl Scene {
             },
             depth_stencil: Some(wgpu::DepthStencilState {
                 format: Renderer::DEPTH_FORMAT,
-                depth_write_enabled: true,
-                depth_compare: wgpu::CompareFunction::Less,
+                depth_write_enabled: Some(true),
+                depth_compare: Some(wgpu::CompareFunction::Less),
                 stencil: wgpu::StencilState::default(),
                 bias: wgpu::DepthBiasState::default(),
             }),
@@ -898,7 +907,7 @@ impl Scene {
                 })],
                 compilation_options: Default::default(),
             }),
-            multiview: None,
+            multiview_mask: None,
             cache: None,
         })
     }
