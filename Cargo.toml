@@ -26,7 +26,7 @@ winit = "0.30.13"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 ash = { version = "0.38", optional = true }
-env_logger = "0.11.9"
+env_logger = "0.11.10"
 egui-winit = "0.33.3"
 gpu-allocator = { version = "0.28", optional = true }
 pollster = "0.4.0"
@@ -36,8 +36,8 @@ wgpu-hal = { version = "28.0.1", features = ["vulkan"], optional = true }
 console_error_panic_hook = "0.1.7"
 console_log = "1.0.0"
 egui-winit = { version = "0.33.3", default-features = false }
-wasm-bindgen = "0.2.114"
-wasm-bindgen-futures = "0.4.64"
+wasm-bindgen = "0.2.115"
+wasm-bindgen-futures = "0.4.65"
 
 [target.'cfg(target_os = "android")'.dependencies]
 android-activity = { version = "0.6", features = ["native-activity"] }
