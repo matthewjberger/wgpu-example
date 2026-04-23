@@ -120,12 +120,14 @@ just list-android               # List connected devices
 
 **Prerequisites:**
 - [cross](https://github.com/cross-rs/cross)
-- Docker (for cross-compilation)
+- Docker Desktop running (for cross-compilation)
 
 **First-time setup:**
 ```bash
 just init-steamdeck
 ```
+
+This installs `cross` and a Linux stable toolchain (`stable-x86_64-unknown-linux-gnu`). The Linux toolchain won't run natively on Windows/macOS, but `cross` mounts your `~/.rustup` into its Linux container so it gets used there — overriding the older rustc baked into cross 0.2.5's image so modern crates (egui, wgpu) can build.
 
 **Build and deploy:**
 ```bash

@@ -110,6 +110,7 @@ run-android device:
 # Install Steam Deck tooling
 init-steamdeck:
     cargo install --locked cross
+    rustup toolchain install --force-non-host stable-x86_64-unknown-linux-gnu
 
 # Build the app for Steam Deck
 build-steamdeck:
