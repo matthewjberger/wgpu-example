@@ -18,7 +18,7 @@ android:
           config_changes: "orientation|keyboardHidden|screenSize|screenLayout|uiMode|density"
           meta_data:
             - name: android.app.lib_name
-              value: app
+              value: app_core
           intent_filters:
             - actions:
                 - android.intent.action.MAIN

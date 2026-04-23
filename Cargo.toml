@@ -1,5 +1,5 @@
 [package]
-name = "app"
+name = "app_core"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.92"
@@ -7,6 +7,10 @@ rust-version = "1.92"
 [lib]
 crate-type = ["cdylib", "rlib"]
 path = "src/lib.rs"
+
+[[bin]]
+name = "app"
+path = "src/main.rs"
 
 [dependencies]
 bytemuck = { version = "1.25.0", features = ["derive"] }
@@ -18,7 +22,6 @@ nalgebra-glm = { version = "0.20.0", features = [
     "convert-bytemuck",
     "serde-serialize",
 ] }
-openxr = { version = "0.21", features = ["static", "loaded"], optional = true }
 web-time = "1.1.0"
 wgpu = { version = "29", default-features = false }
 winit = "0.30.13"
@@ -30,6 +33,9 @@ egui-winit = "0.34"
 gpu-allocator = { version = "0.28", optional = true }
 pollster = "0.4.0"
 wgpu-hal = { version = "29", features = ["vulkan"], optional = true }
+
+[target.'cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))'.dependencies]
+openxr = { version = "0.21", features = ["static", "loaded"], optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 console_error_panic_hook = "0.1.7"
@@ -44,6 +50,7 @@ android_logger = "0.15"
 egui-winit = { version = "0.34", default-features = false }
 ndk-context = "0.1"
 ndk-sys = "0.6"
+openxr = { version = "0.21", default-features = false, features = ["loaded"], optional = true }
 
 [features]
 default = ["wgpu/default"]

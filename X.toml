@@ -1,5 +1,5 @@
 [package]
-name = "app"
+name = "app_core"
 
 [android]
 min_sdk_version = 24

@@ -1,7 +1,7 @@
 use crate::Scene;
 use ash::vk::{self, Handle};
 use openxr as xr;
-use std::ffi::{CString, c_void};
+use std::ffi::{CString, c_char, c_void};
 use web_time::Instant;
 
 const VK_TARGET_VERSION: xr::Version = xr::Version::new(1, 1, 0);
@@ -67,7 +67,11 @@ pub struct XrContext {
 
 impl XrContext {
     pub fn new() -> Result<(Self, wgpu::Device, wgpu::Queue), Box<dyn std::error::Error>> {
+        #[cfg(not(target_os = "android"))]
         let xr_entry = xr::Entry::linked();
+
+        #[cfg(target_os = "android")]
+        let xr_entry = unsafe { xr::Entry::load()? };
 
         #[cfg(target_os = "android")]
         xr_entry.initialize_android_loader()?;
@@ -141,12 +145,12 @@ impl XrContext {
                     std::mem::transmute::<
                         unsafe extern "system" fn(
                             vk::Instance,
-                            *const i8,
+                            *const c_char,
                         )
                             -> Option<unsafe extern "system" fn()>,
                         unsafe extern "system" fn(
                             *const c_void,
-                            *const i8,
+                            *const c_char,
                         )
                             -> Option<unsafe extern "system" fn()>,
                     >(vk_entry.static_fn().get_instance_proc_addr),
@@ -232,12 +236,12 @@ impl XrContext {
                         std::mem::transmute::<
                             unsafe extern "system" fn(
                                 vk::Instance,
-                                *const i8,
+                                *const c_char,
                             )
                                 -> Option<unsafe extern "system" fn()>,
                             unsafe extern "system" fn(
                                 *const c_void,
-                                *const i8,
+                                *const c_char,
                             )
                                 -> Option<unsafe extern "system" fn()>,
                         >(vk_entry.static_fn().get_instance_proc_addr),

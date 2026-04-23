@@ -45,6 +45,10 @@ run:
 run-openxr:
     cargo run -r --features openxr
 
+# Build the desktop app in OpenXR mode
+build-openxr:
+    cargo build -r --features openxr
+
 # Build the app with wgpu + WebGL
 build-webgl:
     trunk build --features webgl
@@ -97,7 +101,7 @@ build-android-openxr:
 # Install the app on connected Android device
 install-android device:
     x build --release --arch arm64 --features android --device adb:{{device}}
-    adb -s {{device}} install -r target/x/release/android/app.apk
+    adb -s {{device}} install -r target/x/release/android/app_core.apk
 
 # Run the app on connected Android device
 run-android device:

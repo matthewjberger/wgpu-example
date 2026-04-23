@@ -17,21 +17,52 @@ Other languages (experimental):
 
 ## Quickstart
 
-| Platform | Command |
-|----------|---------|
-| Native Desktop | `cargo run -r` |
-| WebGPU | `trunk serve --features webgpu --open` |
-| WebGL | `trunk serve --features webgl --open` |
-| Android | `just run-android DEVICE_ID` |
-| Steam Deck | `just build-steamdeck && just deploy-steamdeck` |
-| OpenXR VR (Desktop) | `just run-openxr` |
-| OpenXR VR (Quest) | `just build-android-openxr` |
+All platforms are driven through the [`justfile`](./justfile). Run `just` (no args) to list every recipe.
+
+| Platform            | Run                             | Build only                  |
+|---------------------|---------------------------------|-----------------------------|
+| Native Desktop      | `just run`                      | `just build`                |
+| WebGPU              | `just run-webgpu`               | `just build-webgpu`         |
+| WebGL               | `just run-webgl`                | `just build-webgl`          |
+| Android             | `just run-android DEVICE_ID`    | `just build-android`        |
+| Android (all archs) | —                               | `just build-android-all`    |
+| Steam Deck          | `just build-steamdeck && just deploy-steamdeck` | `just build-steamdeck` |
+| OpenXR VR (Desktop) | `just run-openxr`               | `just build-openxr`         |
+| OpenXR VR (Quest)   | `just build-android-openxr` + `adb install -r target/x/release/android/app_core.apk` | `just build-android-openxr` |
+
+First-time setup per platform: `just init-wasm`, `just init-android`, `just init-steamdeck`.
 
 ## Platform Setup
+
+### Native Desktop
+
+```bash
+just run           # Release build, runs the `app` binary
+just build         # Release build only
+just run-openxr    # Run with the OpenXR feature (desktop VR, see below)
+just build-openxr  # Build the OpenXR binary without running it
+```
 
 ### Web (WebAssembly)
 
 **Prerequisites:** [trunk](https://trunkrs.dev/)
+
+**First-time setup:**
+```bash
+just init-wasm
+```
+
+**Serve locally:**
+```bash
+just run-webgpu  # Serves on http://localhost:8080 and opens the browser
+just run-webgl   # WebGL fallback for older browsers
+```
+
+**Build only** (outputs to `dist/`):
+```bash
+just build-webgpu
+just build-webgl
+```
 
 **Browser Support:** All Chromium-based browsers (Chrome, Brave, Vivaldi) support WebGPU. Firefox supports WebGPU starting with version 141 ([announcement](https://mozillagfx.wordpress.com/2025/07/15/shipping-webgpu-on-windows-in-firefox-141/)).
 
@@ -133,11 +164,11 @@ Native standalone VR for Meta Quest 2, Quest Pro, Quest 3, and Quest 3S.
 just build-android-openxr
 ```
 
-This produces an APK at `target/x/release/android/app.apk`.
+This produces an APK at `target/x/release/android/app_core.apk`.
 
 **Install on Quest:**
 ```bash
-adb install -r target/x/release/android/app.apk
+adb install -r target/x/release/android/app_core.apk
 ```
 
 Or use [SideQuest](https://sidequestvr.com) to drag and drop the APK onto your Quest.

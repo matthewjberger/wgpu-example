@@ -163,7 +163,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "app"
+name = "app_core"
 version = "0.1.0"
 dependencies = [
  "android-activity",
