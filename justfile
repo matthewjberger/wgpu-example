@@ -82,30 +82,13 @@ list-android:
     adb devices
 
 # Build the app for Android (arm64)
-[unix]
 build-android:
     x build --release --platform android --arch arm64 --features android
-    cp -f target/x/release/android/arm64/cargo/aarch64-linux-android/release/libapp_core.so target/x/release/android/arm64/cargo/aarch64-linux-android/release/libapp.so
-
-[windows]
-build-android:
-    x build --release --platform android --arch arm64 --features android
-    Copy-Item -Force target/x/release/android/arm64/cargo/aarch64-linux-android/release/libapp_core.so target/x/release/android/arm64/cargo/aarch64-linux-android/release/libapp.so
 
 # Build the app for Android (all architectures)
-[unix]
 build-android-all:
     x build --release --platform android --arch arm64 --features android
-    cp -f target/x/release/android/arm64/cargo/aarch64-linux-android/release/libapp_core.so target/x/release/android/arm64/cargo/aarch64-linux-android/release/libapp.so
     x build --release --platform android --arch x64 --features android
-    cp -f target/x/release/android/x64/cargo/x86_64-linux-android/release/libapp_core.so target/x/release/android/x64/cargo/x86_64-linux-android/release/libapp.so
-
-[windows]
-build-android-all:
-    x build --release --platform android --arch arm64 --features android
-    Copy-Item -Force target/x/release/android/arm64/cargo/aarch64-linux-android/release/libapp_core.so target/x/release/android/arm64/cargo/aarch64-linux-android/release/libapp.so
-    x build --release --platform android --arch x64 --features android
-    Copy-Item -Force target/x/release/android/x64/cargo/x86_64-linux-android/release/libapp_core.so target/x/release/android/x64/cargo/x86_64-linux-android/release/libapp.so
 
 # Build the app for Android with OpenXR (arm64) for Meta Quest
 build-android-openxr:
