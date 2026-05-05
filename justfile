@@ -71,7 +71,7 @@ init-android:
     rustup target add armv7-linux-androideabi
     rustup target add i686-linux-android
     rustup target add x86_64-linux-android
-    cargo install --locked xbuild
+    cargo install --git https://github.com/rust-mobile/xbuild --bin x --locked
 
 # Pair with Android device for wireless debugging (provide IP:port from pairing screen)
 pair-android address:
@@ -90,7 +90,7 @@ build-android:
     x build --release --platform android --arch arm64 --features android
 
 # Build the app for Android (all architectures)
-build-android-all:
+build-android-all: _ensure-libs-x64
     x build --release --platform android --arch arm64 --features android
     x build --release --platform android --arch x64 --features android
 
@@ -106,6 +106,38 @@ install-android device:
 # Run the app on connected Android device
 run-android device:
     x run --release --arch arm64 --features android --device adb:{{device}}
+
+# Run the app on a connected Android x86_64 device or emulator
+run-android-x64 device: _ensure-libs-x64
+    x run --release --arch x64 --features android --device adb:{{device}}
+
+# Start a local Android emulator with host GPU (avd is the AVD name from `just list-android-emulators`)
+[unix]
+start-android-emulator avd:
+    "${ANDROID_HOME:?ANDROID_HOME is not set; see README emulator setup}/emulator/emulator" -avd {{avd}} -gpu host -no-snapshot
+
+[windows]
+start-android-emulator avd:
+    $h = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } else { [Environment]::GetEnvironmentVariable('ANDROID_HOME','User') }; if (-not $h) { throw 'ANDROID_HOME is not set; see README emulator setup' }; & "$h\emulator\emulator.exe" -avd {{avd}} -gpu host -no-snapshot
+
+# List local Android emulator AVDs
+[unix]
+list-android-emulators:
+    "${ANDROID_HOME:?ANDROID_HOME is not set; see README emulator setup}/emulator/emulator" -list-avds
+
+[windows]
+list-android-emulators:
+    $h = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } else { [Environment]::GetEnvironmentVariable('ANDROID_HOME','User') }; if (-not $h) { throw 'ANDROID_HOME is not set; see README emulator setup' }; & "$h\emulator\emulator.exe" -list-avds
+
+[unix]
+[private]
+_ensure-libs-x64:
+    mkdir -p libs/x86_64
+
+[windows]
+[private]
+_ensure-libs-x64:
+    New-Item -ItemType Directory -Force libs/x86_64 | Out-Null
 
 # Install Steam Deck tooling
 init-steamdeck:
