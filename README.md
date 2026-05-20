@@ -14,6 +14,7 @@ Other languages (experimental):
 - [wgpu-example-odin](https://github.com/matthewjberger/wgpu-example-odin)
 - [wgpu-example-c](https://github.com/matthewjberger/wgpu-example-c)
 - [wgpu-example-zig](https://github.com/matthewjberger/wgpu-example-zig)
+- [wgpu-example-go](https://github.com/matthewjberger/wgpu-example-go)
 
 ## Quickstart
 
