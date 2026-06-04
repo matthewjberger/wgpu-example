@@ -16,6 +16,14 @@ Other languages (experimental):
 - [wgpu-example-zig](https://github.com/matthewjberger/wgpu-example-zig)
 - [wgpu-example-go](https://github.com/matthewjberger/wgpu-example-go)
 
+## WebGPU in a Web Worker
+
+Examples of running WebGPU off the main thread, where a web worker owns an `OffscreenCanvas` and drives the render loop while the page only transfers the canvas and forwards events:
+
+- [bevy-worker](https://github.com/matthewjberger/bevy-worker) - a [Bevy](https://bevyengine.org) app rendering in the worker, with a TypeScript frontend.
+- [webgpu-worker](https://github.com/matthewjberger/webgpu-worker) - the same architecture without an engine, rendering with wgpu from scratch, with a TypeScript frontend.
+- [webgpu-worker-leptos](https://github.com/matthewjberger/webgpu-worker-leptos) - wgpu from scratch with a [Leptos](https://leptos.dev) frontend, so the whole stack is in Rust.
+
 ## Quickstart
 
 All platforms are driven through the [`justfile`](./justfile). Run `just` (no args) to list every recipe.
