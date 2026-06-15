@@ -17,7 +17,7 @@ bytemuck = { version = "1.25.0", features = ["derive"] }
 egui = "0.34"
 egui-wgpu = { version = "0.34", features = ["winit"] }
 futures = "0.3.32"
-log = "0.4.29"
+log = "0.4.32"
 nalgebra-glm = { version = "0.20.0", features = [
     "convert-bytemuck",
     "serde-serialize",
@@ -41,8 +41,8 @@ openxr = { version = "0.21", features = ["static", "loaded"], optional = true }
 console_error_panic_hook = "0.1.7"
 console_log = "1.0.0"
 egui-winit = { version = "0.34", default-features = false }
-wasm-bindgen = "0.2.115"
-wasm-bindgen-futures = "0.4.65"
+wasm-bindgen = "0.2.125"
+wasm-bindgen-futures = "0.4.75"
 
 [target.'cfg(target_os = "android")'.dependencies]
 android-activity = { version = "0.6", features = ["native-activity"] }
