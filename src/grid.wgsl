@@ -1,6 +1,6 @@
 struct Uniform {
-    view_proj: mat4x4<f32>,
-    camera_world_pos: vec3<f32>,
+    view_proj: array<mat4x4<f32>, 2>,
+    camera_world_pos: array<vec4<f32>, 2>,
     grid_size: f32,
     grid_min_pixels: f32,
     grid_cell_size: f32,
@@ -14,10 +14,11 @@ var<uniform> ubo: Uniform;
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
     @location(0) world_pos: vec3<f32>,
+    @location(1) camera_world_pos: vec3<f32>,
 };
 
 @vertex
-fn vertex_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
+fn vertex_main(@builtin(vertex_index) vertex_index: u32, @builtin(view_index) view: u32) -> VertexOutput {
     var pos = vec3<f32>(0.0);
 
     switch vertex_index {
@@ -30,16 +31,18 @@ fn vertex_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
         default: {}
     }
 
+    let camera_world_pos = ubo.camera_world_pos[view].xyz;
+
     let grid_scale = select(1.0, max(10.0, ubo.orthographic_scale * 100.0), ubo.is_orthographic > 0.5);
     pos = pos * ubo.grid_size * grid_scale;
     let world_pos = vec3<f32>(
-        pos.x + ubo.camera_world_pos.x,
+        pos.x + camera_world_pos.x,
         0.0,
-        pos.z + ubo.camera_world_pos.z
+        pos.z + camera_world_pos.z
     );
 
     var output: VertexOutput;
-    var clip_pos = ubo.view_proj * vec4<f32>(world_pos, 1.0);
+    var clip_pos = ubo.view_proj[view] * vec4<f32>(world_pos, 1.0);
 
     if (ubo.is_orthographic > 0.5) {
         clip_pos.z = clamp(clip_pos.z, 0.0, clip_pos.w);
@@ -47,6 +50,7 @@ fn vertex_main(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
 
     output.clip_position = clip_pos;
     output.world_pos = world_pos;
+    output.camera_world_pos = camera_world_pos;
     return output;
 }
 
@@ -109,7 +113,7 @@ fn fragment_main(in: VertexOutput) -> @location(0) vec4<f32> {
     }
 
     if (ubo.is_orthographic < 0.5) {
-        let dist = length(in.world_pos.xz - ubo.camera_world_pos.xz);
+        let dist = length(in.world_pos.xz - in.camera_world_pos.xz);
         let opacity_falloff = 1.0 - smoothstep(0.8 * ubo.grid_size, ubo.grid_size * 3.0, dist);
         color.a *= opacity_falloff;
     }
