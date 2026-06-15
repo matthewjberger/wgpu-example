@@ -41,25 +41,9 @@ struct SkyUniform {
 }
 
 pub struct XrContext {
-    _vk_entry: ash::Entry,
-    _vk_instance: ash::Instance,
-    instance: xr::Instance,
-    _system: xr::SystemId,
-    session: xr::Session<xr::Vulkan>,
-    frame_wait: xr::FrameWaiter,
-    frame_stream: xr::FrameStream<xr::Vulkan>,
-    stage: xr::Space,
-    swapchain: xr::Swapchain<xr::Vulkan>,
     swapchain_buffers: Vec<wgpu::Texture>,
-    resolution: (u32, u32),
-    _views: Vec<xr::ViewConfigurationView>,
-    action_set: xr::ActionSet,
-    move_action: xr::Action<xr::Vector2f>,
-    left_trigger_action: xr::Action<f32>,
-    right_trigger_action: xr::Action<f32>,
-    left_hand_space: xr::Space,
-    right_hand_space: xr::Space,
-    player_position: nalgebra_glm::Vec3,
+    depth_view: wgpu::TextureView,
+    _depth_texture: wgpu::Texture,
     cube_vertex_buffer: wgpu::Buffer,
     cube_index_buffer: wgpu::Buffer,
     green_cube_vertex_buffer: wgpu::Buffer,
@@ -72,8 +56,24 @@ pub struct XrContext {
     sky_uniform_buffer: wgpu::Buffer,
     sky_bind_group: wgpu::BindGroup,
     sky_pipeline: wgpu::RenderPipeline,
-    depth_view: wgpu::TextureView,
-    _depth_texture: wgpu::Texture,
+    swapchain: xr::Swapchain<xr::Vulkan>,
+    stage: xr::Space,
+    left_hand_space: xr::Space,
+    right_hand_space: xr::Space,
+    move_action: xr::Action<xr::Vector2f>,
+    left_trigger_action: xr::Action<f32>,
+    right_trigger_action: xr::Action<f32>,
+    action_set: xr::ActionSet,
+    frame_stream: xr::FrameStream<xr::Vulkan>,
+    frame_wait: xr::FrameWaiter,
+    session: xr::Session<xr::Vulkan>,
+    _views: Vec<xr::ViewConfigurationView>,
+    _system: xr::SystemId,
+    instance: xr::Instance,
+    _vk_instance: ash::Instance,
+    _vk_entry: ash::Entry,
+    resolution: (u32, u32),
+    player_position: nalgebra_glm::Vec3,
     session_running: bool,
 }
 
@@ -818,6 +818,44 @@ impl XrContext {
         self.session_running
     }
 
+    pub fn shutdown(&mut self) {
+        if !self.session_running {
+            return;
+        }
+
+        if let Err(error) = self.session.request_exit() {
+            log::warn!("xrRequestExitSession failed during shutdown: {error}");
+            self.session_running = false;
+            return;
+        }
+
+        let mut event_buffer = xr::EventDataBuffer::new();
+        for _ in 0..200 {
+            match self.instance.poll_event(&mut event_buffer) {
+                Ok(Some(xr::Event::SessionStateChanged(state_change))) => {
+                    match state_change.state() {
+                        xr::SessionState::STOPPING => {
+                            if let Err(error) = self.session.end() {
+                                log::warn!("xrEndSession failed during shutdown: {error}");
+                                break;
+                            }
+                        }
+                        xr::SessionState::EXITING => break,
+                        _ => {}
+                    }
+                }
+                Ok(Some(_)) => {}
+                Ok(None) => std::thread::sleep(std::time::Duration::from_millis(10)),
+                Err(error) => {
+                    log::warn!("Event polling failed during shutdown: {error}");
+                    break;
+                }
+            }
+        }
+
+        self.session_running = false;
+    }
+
     pub fn wait_frame(&mut self) -> Result<xr::FrameState, Box<dyn std::error::Error>> {
         Ok(self.frame_wait.wait()?)
     }
@@ -1398,9 +1436,16 @@ pub fn run_xr() -> Result<(), Box<dyn std::error::Error>> {
     log::info!("Starting XR render loop");
 
     loop {
-        if !xr_context.poll_events()? {
-            log::info!("XR session ended, exiting");
-            break;
+        match xr_context.poll_events() {
+            Ok(true) => {}
+            Ok(false) => {
+                log::info!("XR session ended, exiting");
+                break;
+            }
+            Err(error) => {
+                log::warn!("XR event polling failed, shutting down: {error}");
+                break;
+            }
         }
 
         if !xr_context.is_session_running() {
@@ -1418,11 +1463,36 @@ pub fn run_xr() -> Result<(), Box<dyn std::error::Error>> {
             &nalgebra_glm::Vec3::y(),
         );
 
-        let frame_state = xr_context.wait_frame()?;
-        xr_context.update_movement(delta_time, frame_state.predicted_display_time)?;
+        let frame_state = match xr_context.wait_frame() {
+            Ok(frame_state) => frame_state,
+            Err(error) => {
+                log::warn!("xrWaitFrame failed, shutting down: {error}");
+                break;
+            }
+        };
 
-        xr_context.render_frame(&device, &queue, &mut scene, delta_time, frame_state)?;
+        if let Err(error) =
+            xr_context.update_movement(delta_time, frame_state.predicted_display_time)
+        {
+            log::warn!("Action sync failed, shutting down: {error}");
+            break;
+        }
+
+        if let Err(error) =
+            xr_context.render_frame(&device, &queue, &mut scene, delta_time, frame_state)
+        {
+            log::warn!("Frame rendering failed, shutting down: {error}");
+            break;
+        }
     }
+
+    log::info!("Draining GPU work before teardown");
+    let _ = device.poll(wgpu::PollType::Wait {
+        submission_index: None,
+        timeout: None,
+    });
+    xr_context.shutdown();
+    drop(xr_context);
 
     Ok(())
 }
