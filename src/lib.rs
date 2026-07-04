@@ -12,6 +12,12 @@ pub mod xr;
 #[cfg(all(not(target_arch = "wasm32"), feature = "openxr"))]
 pub use xr::run_xr;
 
+#[cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))]
+pub mod raytracing;
+
+#[cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))]
+pub use raytracing::run_raytracing;
+
 use std::sync::Arc;
 use web_time::{Duration, Instant};
 use winit::{

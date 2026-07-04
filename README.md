@@ -1,6 +1,6 @@
 # Rust / Winit / Egui / Wgpu Triangle
 
-A cross-platform [Rust](https://www.rust-lang.org/) graphics demo using [wgpu](https://wgpu.rs/) to render a spinning triangle. Supports native desktop, WebGL/WebGPU ([WASM](https://webassembly.org/)), Android, Steam Deck, and [OpenXR](https://www.khronos.org/openxr/) VR with hand tracking.
+A cross-platform [Rust](https://www.rust-lang.org/) graphics demo using [wgpu](https://wgpu.rs/) to render a spinning triangle. Supports native desktop, WebGL/WebGPU ([WASM](https://webassembly.org/)), Android, Steam Deck, [OpenXR](https://www.khronos.org/openxr/) VR with hand tracking, and a real-time [hardware ray tracing](#hardware-ray-tracing) demo (`just run-rt`).
 
 > **Related Projects:**
 > - [Nightshade](https://github.com/matthewjberger/nightshade) - Game engine based on this boilerplate
@@ -31,6 +31,7 @@ All platforms are driven through the [`justfile`](./justfile). Run `just` (no ar
 | Platform            | Run                             | Build only                  |
 |---------------------|---------------------------------|-----------------------------|
 | Native Desktop      | `just run`                      | `just build`                |
+| Hardware Ray Tracing| `just run-rt`                   | `cargo build -r --bin rt`   |
 | WebGPU              | `just run-webgpu`               | `just build-webgpu`         |
 | WebGL               | `just run-webgl`                | `just build-webgl`          |
 | Android (arm64)     | `just run-android DEVICE_ID`    | `just build-android`        |
@@ -49,9 +50,37 @@ First-time setup per platform: `just init-wasm`, `just init-android`, `just init
 ```bash
 just run           # Release build, runs the `app` binary
 just build         # Release build only
+just run-rt        # Hardware ray tracing demo (see below)
 just run-openxr    # Run with the OpenXR feature (desktop VR, see below)
 just build-openxr  # Build the OpenXR binary without running it
 ```
+
+### Hardware Ray Tracing
+
+<img width="2560" height="1392" alt="hardware ray tracing demo" src="assets/raytracing.png" />
+
+`just run-rt` runs a real-time, hardware-accelerated ray tracer built on wgpu's
+acceleration structures (BLAS + TLAS) and inline ray queries in a compute shader.
+This is genuine GPU ray tracing on the RT cores, not a software tracer. wgpu
+exposes no ray-tracing pipeline or shader binding table, so the whole tracer runs
+as one compute shader driving `ray_query` over the hardware acceleration
+structures. This is the same technique used for inline ray tracing in Vulkan/DirectX.
+
+The scene is an original mixed-geometry composition: a refractive glass cube, a
+standing reflective torus, a tall mirror slab, matte and reflective boxes, and a
+few spheres, sitting on a mirrored checkerboard floor under a spherical area
+light. Rays bounce through several reflective surfaces per pixel, the glass both
+reflects and bends light with a per-wavelength offset that fringes its edges in
+faint rainbow, and the area light throws soft shadows that spread wider the
+farther a caster sits above the floor. Every frame is nudged by a fraction of a
+pixel and blended into a running average, so a still camera keeps sharpening
+toward a clean result and any movement starts it over.
+
+Controls: **left-drag** to orbit, **mouse wheel** to zoom, **Esc** to quit.
+
+Requires `wgpu::Features::EXPERIMENTAL_RAY_QUERY`: a ray-tracing capable GPU with
+current drivers (NVIDIA RTX 20-series or newer, AMD RX 6000-series or newer, or
+Intel Arc). The demo panics with a clear message if the GPU lacks the feature.
 
 ### Web (WebAssembly)
 

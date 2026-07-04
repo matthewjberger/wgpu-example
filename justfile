@@ -45,6 +45,10 @@ run:
 run-openxr:
     cargo run -r --features openxr
 
+# Run the hardware ray tracing demo
+run-rt:
+    cargo run -r --bin rt
+
 # Build the desktop app in OpenXR mode
 build-openxr:
     cargo build -r --features openxr
