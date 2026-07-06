@@ -529,17 +529,18 @@ impl Renderer {
         let surface_texture = match self.gpu.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(frame)
             | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => frame,
-            wgpu::CurrentSurfaceTexture::Outdated => {
+            wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost => {
                 self.gpu
                     .surface
                     .configure(&self.gpu.device, &self.gpu.surface_config);
                 match self.gpu.surface.get_current_texture() {
                     wgpu::CurrentSurfaceTexture::Success(frame)
                     | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => frame,
-                    other => {
-                        panic!("Failed to get surface texture after reconfiguration: {other:?}")
-                    }
+                    _ => return,
                 }
+            }
+            wgpu::CurrentSurfaceTexture::Occluded | wgpu::CurrentSurfaceTexture::Timeout => {
+                return;
             }
             other => panic!("Failed to get surface texture: {other:?}"),
         };
