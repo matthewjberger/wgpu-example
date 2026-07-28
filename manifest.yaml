@@ -3,6 +3,9 @@ android:
     - libs
   manifest:
     package: com.example.wgpu_android_xr
+    sdk:
+      min_sdk_version: 24
+      target_sdk_version: 34
     uses_feature:
       - name: android.hardware.vulkan.level
         required: true
@@ -15,7 +18,7 @@ android:
         - name: android.app.NativeActivity
           exported: true
           orientation: landscape
-          config_changes: "orientation|keyboardHidden|screenSize|screenLayout|uiMode|density"
+          config_changes: "orientation|keyboardHidden|screenSize|screenLayout|smallestScreenSize|uiMode|density"
           meta_data:
             - name: android.app.lib_name
               value: app_core
