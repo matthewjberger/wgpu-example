@@ -17,7 +17,7 @@ android:
       activities:
         - name: android.app.NativeActivity
           exported: true
-          orientation: landscape
+          orientation: user
           config_changes: "orientation|keyboardHidden|screenSize|screenLayout|smallestScreenSize|uiMode|density"
           meta_data:
             - name: android.app.lib_name
