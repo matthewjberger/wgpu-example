@@ -145,12 +145,6 @@ impl ApplicationHandler for App {
             gui_context.set_pixels_per_point(1.0);
         }
 
-        #[cfg(target_os = "android")]
-        {
-            let scale_factor = window_handle.scale_factor() as f32;
-            gui_context.set_pixels_per_point(scale_factor);
-        }
-
         let viewport_id = gui_context.viewport_id();
         let gui_state = egui_winit::State::new(
             gui_context,
@@ -218,11 +212,11 @@ impl ApplicationHandler for App {
         #[cfg(target_arch = "wasm32")]
         {
             let mut renderer_received = false;
-            if let Some(receiver) = self.renderer_receiver.as_mut() {
-                if let Ok(Some(renderer)) = receiver.try_recv() {
-                    self.renderer = Some(renderer);
-                    renderer_received = true;
-                }
+            if let Some(receiver) = self.renderer_receiver.as_mut()
+                && let Ok(Some(renderer)) = receiver.try_recv()
+            {
+                self.renderer = Some(renderer);
+                renderer_received = true;
             }
             if renderer_received {
                 self.renderer_receiver = None;
@@ -259,11 +253,6 @@ impl ApplicationHandler for App {
                 }
             }
             WindowEvent::ScaleFactorChanged { .. } => {
-                #[cfg(not(target_arch = "wasm32"))]
-                {
-                    let scale_factor = window.scale_factor() as f32;
-                    gui_state.egui_ctx().set_pixels_per_point(scale_factor);
-                }
                 #[cfg(target_arch = "wasm32")]
                 {
                     gui_state.egui_ctx().set_pixels_per_point(1.0);
@@ -278,11 +267,6 @@ impl ApplicationHandler for App {
                 renderer.resize(width, height);
                 self.last_size = (width, height);
 
-                #[cfg(not(target_arch = "wasm32"))]
-                {
-                    let scale_factor = window.scale_factor() as f32;
-                    gui_state.egui_ctx().set_pixels_per_point(scale_factor);
-                }
                 #[cfg(target_arch = "wasm32")]
                 {
                     gui_state.egui_ctx().set_pixels_per_point(1.0);
