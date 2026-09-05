@@ -5,7 +5,7 @@ android:
     package: com.example.wgpu_android_xr
     sdk:
       min_sdk_version: 24
-      target_sdk_version: 34
+      target_sdk_version: 33
     uses_feature:
       - name: android.hardware.vulkan.level
         required: true
