@@ -476,6 +476,7 @@ impl RayTracer {
                 power_preference: wgpu::PowerPreference::HighPerformance,
                 compatible_surface: Some(&surface),
                 force_fallback_adapter: false,
+                apply_limit_buckets: false,
             })
             .await
             .expect("Failed to request adapter!");
@@ -532,6 +533,7 @@ impl RayTracer {
             alpha_mode: surface_capabilities.alpha_modes[0],
             view_formats: vec![],
             desired_maximum_frame_latency: 2,
+            color_space: wgpu::SurfaceColorSpace::Auto,
         };
         surface.configure(&device, &surface_config);
 
@@ -1038,7 +1040,7 @@ impl RayTracer {
         }
 
         self.queue.submit(iter::once(encoder.finish()));
-        surface_texture.present();
+        self.queue.present(surface_texture);
     }
 }
 

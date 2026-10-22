@@ -2,7 +2,7 @@
 name = "app_core"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.98"
+rust-version = "1.99"
 default-run = "app"
 
 [lib]
@@ -14,44 +14,44 @@ name = "app"
 path = "src/main.rs"
 
 [dependencies]
-bytemuck = { version = "1.25.1", features = ["derive"] }
-egui = "0.34"
-egui-wgpu = { version = "0.34", features = ["winit"] }
-futures = "0.3.32"
-log = "0.4.33"
-nalgebra-glm = { version = "0.20.0", features = [
+bytemuck = { version = "1.25.2", features = ["derive"] }
+egui = { version = "0.37", features = ["default_fonts"] }
+egui-wgpu = { version = "0.37", features = ["winit"] }
+futures = "0.3.34"
+log = "0.4.34"
+nalgebra-glm = { version = "0.21.0", features = [
     "convert-bytemuck",
     "serde-serialize",
 ] }
 web-time = "1.1.0"
-wgpu = { version = "29", default-features = false }
+wgpu = { version = "30", default-features = false }
 winit = "0.30.13"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 ash = { version = "0.38", optional = true }
 env_logger = "0.11.11"
-egui-winit = "0.34"
+egui-winit = "0.37"
 gpu-allocator = { version = "0.28", optional = true }
-pollster = "0.4.0"
-wgpu-hal = { version = "29", features = ["vulkan"], optional = true }
+pollster = "1.0.1"
+wgpu-hal = { version = "30", features = ["vulkan"], optional = true }
 
 [target.'cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))'.dependencies]
-openxr = { version = "0.21", features = ["static", "loaded"], optional = true }
+openxr = { version = "0.22", features = ["static", "loaded"], optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 console_error_panic_hook = "0.1.7"
-console_log = "1.0.0"
-egui-winit = { version = "0.34", default-features = false }
-wasm-bindgen = "0.2.126"
-wasm-bindgen-futures = "0.4.76"
+console_log = "1.1.0"
+egui-winit = { version = "0.37", default-features = false }
+wasm-bindgen = "0.2.129"
+wasm-bindgen-futures = "0.4.79"
 
 [target.'cfg(target_os = "android")'.dependencies]
 android-activity = { version = "0.6", features = ["native-activity"] }
 android_logger = "0.15"
-egui-winit = { version = "0.34", default-features = false }
+egui-winit = { version = "0.37", default-features = false }
 ndk-context = "0.1"
 ndk-sys = "0.6"
-openxr = { version = "0.21", default-features = false, features = ["loaded"], optional = true }
+openxr = { version = "0.22", default-features = false, features = ["loaded"], optional = true }
 
 [features]
 default = ["wgpu/default"]

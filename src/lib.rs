@@ -350,7 +350,7 @@ impl ApplicationHandler for App {
                     platform_output,
                     ..
                 } = gui_state.egui_ctx().run_ui(gui_input, |ui| {
-                    egui::Panel::top("top").show_inside(ui, |ui| {
+                    egui::Panel::top("top").show(ui, |ui| {
                         ui.horizontal(|ui| {
                             egui::MenuBar::new().ui(ui, |ui| {
                                 ui.menu_button("File", |ui| {
@@ -394,15 +394,15 @@ impl ApplicationHandler for App {
                         });
                     });
 
-                    egui::Panel::left("left").show_inside(ui, |ui| {
+                    egui::Panel::left("left").show(ui, |ui| {
                         ui.heading("Scene Tree");
                     });
 
-                    egui::Panel::right("right").show_inside(ui, |ui| {
+                    egui::Panel::right("right").show(ui, |ui| {
                         ui.heading("Inspector");
                     });
 
-                    egui::Panel::bottom("Console").show_inside(ui, |ui| {
+                    egui::Panel::bottom("Console").show(ui, |ui| {
                         ui.heading("Console");
                     });
                 });
@@ -486,9 +486,15 @@ impl Renderer {
         self.scene
             .update(&self.gpu.queue, self.gpu.aspect_ratio(), delta_time);
 
-        for (id, image_delta) in &textures_delta.set {
-            self.egui_renderer
-                .update_texture(&self.gpu.device, &self.gpu.queue, *id, image_delta);
+        for (id, image_deltas) in &textures_delta.set {
+            for image_delta in image_deltas {
+                self.egui_renderer.update_texture(
+                    &self.gpu.device,
+                    &self.gpu.queue,
+                    *id,
+                    image_delta,
+                );
+            }
         }
 
         for id in &textures_delta.free {
@@ -585,7 +591,7 @@ impl Renderer {
         }
 
         self.gpu.queue.submit(std::iter::once(encoder.finish()));
-        surface_texture.present();
+        self.gpu.queue.present(surface_texture);
     }
 }
 
@@ -653,6 +659,7 @@ impl Gpu {
                 power_preference: wgpu::PowerPreference::default(),
                 compatible_surface: Some(&surface),
                 force_fallback_adapter: false,
+                apply_limit_buckets: false,
             })
             .await
             .expect("Failed to request adapter!");
@@ -695,6 +702,7 @@ impl Gpu {
             alpha_mode: surface_capabilities.alpha_modes[0],
             view_formats: vec![],
             desired_maximum_frame_latency: 2,
+            color_space: wgpu::SurfaceColorSpace::Auto,
         };
 
         surface.configure(&device, &surface_config);
@@ -718,6 +726,7 @@ impl Gpu {
                 power_preference: wgpu::PowerPreference::default(),
                 compatible_surface: None,
                 force_fallback_adapter: false,
+                apply_limit_buckets: false,
             })
             .await
             .expect("Failed to request adapter!");
@@ -747,6 +756,7 @@ impl Gpu {
             alpha_mode: wgpu::CompositeAlphaMode::Opaque,
             view_formats: vec![],
             desired_maximum_frame_latency: 2,
+            color_space: wgpu::SurfaceColorSpace::Auto,
         };
 
         let dummy_surface = unsafe {
@@ -864,7 +874,7 @@ impl Scene {
             vertex: wgpu::VertexState {
                 module: &shader_module,
                 entry_point: Some("vertex_main"),
-                buffers: &[Vertex::description(&Vertex::vertex_attributes())],
+                buffers: &[Some(Vertex::description(&Vertex::vertex_attributes()))],
                 compilation_options: Default::default(),
             },
             primitive: wgpu::PrimitiveState {

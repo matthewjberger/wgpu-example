@@ -80,13 +80,19 @@ pub struct XrContext {
 impl XrContext {
     pub fn new() -> Result<(Self, wgpu::Device, wgpu::Queue), Box<dyn std::error::Error>> {
         #[cfg(not(target_os = "android"))]
-        let xr_entry = xr::Entry::linked();
+        let platform_info = ();
 
         #[cfg(target_os = "android")]
-        let xr_entry = unsafe { xr::Entry::load()? };
+        let platform_info = {
+            let android_context = ndk_context::android_context();
+            unsafe { xr::AndroidPlatformInfo::new(android_context.vm(), android_context.context()) }
+        };
+
+        #[cfg(not(target_os = "android"))]
+        let xr_entry = xr::Entry::linked(&platform_info)?;
 
         #[cfg(target_os = "android")]
-        xr_entry.initialize_android_loader()?;
+        let xr_entry = unsafe { xr::Entry::load(&platform_info)? };
 
         let mut required_extensions = xr::ExtensionSet::default();
         required_extensions.khr_vulkan_enable2 = true;
@@ -106,6 +112,7 @@ impl XrContext {
             },
             &required_extensions,
             &[],
+            &platform_info,
         )?;
 
         let system = xr_instance.system(xr::FormFactor::HEAD_MOUNTED_DISPLAY)?;
@@ -430,6 +437,7 @@ impl XrContext {
                                 | wgpu::TextureUsages::COPY_DST,
                             view_formats: &[],
                         },
+                        wgpu::TextureUses::UNINITIALIZED,
                     )
                 };
                 Ok(texture)
@@ -509,9 +517,9 @@ impl XrContext {
             vertex: wgpu::VertexState {
                 module: &mesh_shader,
                 entry_point: Some("vertex_main"),
-                buffers: &[crate::Vertex::description(
+                buffers: &[Some(crate::Vertex::description(
                     &crate::Vertex::vertex_attributes(),
-                )],
+                ))],
                 compilation_options: Default::default(),
             },
             fragment: Some(wgpu::FragmentState {
