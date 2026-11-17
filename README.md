@@ -1,4 +1,4 @@
-# Rust / Winit / Egui / Wgpu Triangle
+# Rust / Winit / Wgpu Triangle
 
 A cross-platform [Rust](https://www.rust-lang.org/) graphics demo using [wgpu](https://wgpu.rs/) to render a spinning triangle. Supports native desktop, WebGL/WebGPU ([WASM](https://webassembly.org/)), Android, Steam Deck, [OpenXR](https://www.khronos.org/openxr/) VR with hand tracking, and a real-time [hardware ray tracing](#hardware-ray-tracing) demo (`just run-rt`).
 
@@ -259,7 +259,7 @@ New-Item -Path $licDir -ItemType Directory -Force | Out-Null
 just init-steamdeck
 ```
 
-This installs `cross` and a Linux stable toolchain (`stable-x86_64-unknown-linux-gnu`). The Linux toolchain won't run natively on Windows/macOS, but `cross` mounts your `~/.rustup` into its Linux container so it gets used there - overriding the older rustc baked into cross 0.2.5's image so modern crates (egui, wgpu) can build.
+This installs `cross` and a Linux stable toolchain (`stable-x86_64-unknown-linux-gnu`). The Linux toolchain won't run natively on Windows/macOS, but `cross` mounts your `~/.rustup` into its Linux container so it gets used there - overriding the older rustc baked into cross 0.2.5's image so modern crates (wgpu) can build.
 
 **Build and deploy:**
 ```bash

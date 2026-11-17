@@ -6,9 +6,10 @@ use web_time::Instant;
 use winit::{
     application::ApplicationHandler,
     dpi::{PhysicalPosition, PhysicalSize},
-    event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent},
+    event::{ButtonSource, ElementState, MouseButton, MouseScrollDelta, WindowEvent},
+    event_loop::ActiveEventLoop,
     keyboard::{KeyCode, PhysicalKey},
-    window::Window,
+    window::{Window, WindowAttributes, WindowId},
 };
 
 const WIDTH: u32 = 800;
@@ -462,8 +463,8 @@ struct RayTracer {
 }
 
 impl RayTracer {
-    async fn new(window: Arc<Window>) -> Self {
-        let size = window.inner_size();
+    async fn new(window: Arc<dyn Window>) -> Self {
+        let size = window.surface_size();
         let width = size.width.max(1);
         let height = size.height.max(1);
 
@@ -1046,22 +1047,22 @@ impl RayTracer {
 
 #[derive(Default)]
 struct RayTracingApp {
-    window: Option<Arc<Window>>,
+    window: Option<Arc<dyn Window>>,
     ray_tracer: Option<RayTracer>,
     dragging: bool,
     last_cursor: Option<PhysicalPosition<f64>>,
 }
 
 impl ApplicationHandler for RayTracingApp {
-    fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
+    fn can_create_surfaces(&mut self, event_loop: &dyn ActiveEventLoop) {
         if self.window.is_some() {
             return;
         }
-        let attributes = Window::default_attributes()
+        let attributes = WindowAttributes::default()
             .with_title("Wgpu Hardware Ray Tracing")
-            .with_inner_size(PhysicalSize::new(WIDTH, HEIGHT))
+            .with_surface_size(PhysicalSize::new(WIDTH, HEIGHT))
             .with_resizable(false);
-        let window = Arc::new(event_loop.create_window(attributes).unwrap());
+        let window: Arc<dyn Window> = Arc::from(event_loop.create_window(attributes).unwrap());
         self.window = Some(window.clone());
         let ray_tracer = pollster::block_on(RayTracer::new(window.clone()));
         self.ray_tracer = Some(ray_tracer);
@@ -1070,8 +1071,8 @@ impl ApplicationHandler for RayTracingApp {
 
     fn window_event(
         &mut self,
-        event_loop: &winit::event_loop::ActiveEventLoop,
-        _window_id: winit::window::WindowId,
+        event_loop: &dyn ActiveEventLoop,
+        _window_id: WindowId,
         event: WindowEvent,
     ) {
         let (Some(window), Some(ray_tracer)) = (self.window.as_ref(), self.ray_tracer.as_mut())
@@ -1090,12 +1091,12 @@ impl ApplicationHandler for RayTracingApp {
                     },
                 ..
             } => event_loop.exit(),
-            WindowEvent::Resized(PhysicalSize { width, height }) => {
+            WindowEvent::SurfaceResized(PhysicalSize { width, height }) => {
                 ray_tracer.resize(width, height);
             }
-            WindowEvent::MouseInput {
+            WindowEvent::PointerButton {
                 state,
-                button: MouseButton::Left,
+                button: ButtonSource::Mouse(MouseButton::Left),
                 ..
             } => {
                 self.dragging = state == ElementState::Pressed;
@@ -1103,7 +1104,7 @@ impl ApplicationHandler for RayTracingApp {
                     self.last_cursor = None;
                 }
             }
-            WindowEvent::CursorMoved { position, .. } => {
+            WindowEvent::PointerMoved { position, .. } => {
                 if self.dragging {
                     if let Some(last) = self.last_cursor {
                         let delta_x = (position.x - last.x) as f32;
@@ -1121,6 +1122,7 @@ impl ApplicationHandler for RayTracingApp {
                 let scroll = match delta {
                     MouseScrollDelta::LineDelta(_, y) => y,
                     MouseScrollDelta::PixelDelta(position) => position.y as f32 / 120.0,
+                    _ => 0.0,
                 };
                 ray_tracer.camera.distance *= 0.9_f32.powf(scroll);
                 ray_tracer.camera.distance = ray_tracer.camera.distance.clamp(3.0, 30.0);
@@ -1139,7 +1141,6 @@ pub fn run_raytracing() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
     let event_loop = winit::event_loop::EventLoop::builder().build()?;
     event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
-    let mut app = RayTracingApp::default();
-    event_loop.run_app(&mut app)?;
+    event_loop.run_app(RayTracingApp::default())?;
     Ok(())
 }

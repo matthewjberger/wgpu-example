@@ -15,8 +15,6 @@ path = "src/main.rs"
 
 [dependencies]
 bytemuck = { version = "1.25.2", features = ["derive"] }
-egui = { version = "0.37", features = ["default_fonts"] }
-egui-wgpu = { version = "0.37", features = ["winit"] }
 log = "0.4.35"
 nalgebra-glm = { version = "0.21.0", features = [
     "convert-bytemuck",
@@ -24,12 +22,11 @@ nalgebra-glm = { version = "0.21.0", features = [
 ] }
 web-time = "1.1.0"
 wgpu = { version = "30", default-features = false }
-winit = "0.30.13"
+winit = "0.31.0-beta.4"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 ash = { version = "0.38", optional = true }
 env_logger = "0.11.11"
-egui-winit = "0.37"
 gpu-allocator = { version = "0.28", optional = true }
 pollster = "1.0.2"
 wgpu-hal = { version = "30", features = ["vulkan"], optional = true }
@@ -40,7 +37,6 @@ openxr = { version = "0.22", features = ["static", "loaded"], optional = true }
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 console_error_panic_hook = "0.1.7"
 console_log = "1.1.0"
-egui-winit = { version = "0.37", default-features = false }
 futures = "0.3.34"
 wasm-bindgen = "0.2.130"
 wasm-bindgen-futures = "0.4.80"
@@ -48,7 +44,6 @@ wasm-bindgen-futures = "0.4.80"
 [target.'cfg(target_os = "android")'.dependencies]
 android-activity = { version = "0.6", features = ["native-activity"] }
 android_logger = "0.15"
-egui-winit = { version = "0.37", default-features = false }
 ndk-context = "0.1"
 ndk-sys = "0.6"
 openxr = { version = "0.22", default-features = false, features = ["loaded"], optional = true }

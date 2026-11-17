@@ -24,7 +24,8 @@ use winit::{
     application::ApplicationHandler,
     dpi::PhysicalSize,
     event::WindowEvent,
-    window::{Theme, Window},
+    event_loop::ActiveEventLoop,
+    window::{Window, WindowAttributes, WindowId},
 };
 
 #[cfg(all(target_os = "android", not(feature = "openxr")))]
@@ -43,9 +44,8 @@ fn android_main(app: AndroidApp) {
         .expect("Failed to create event loop!");
 
     event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
-    let mut application = App::default();
     event_loop
-        .run_app(&mut application)
+        .run_app(App::default())
         .expect("Failed to run app!");
 }
 
@@ -76,41 +76,32 @@ fn android_main(app: AndroidApp) {
 
 #[derive(Default)]
 pub struct App {
-    window: Option<Arc<Window>>,
+    window: Option<Arc<dyn Window>>,
     renderer: Option<Renderer>,
-    gui_state: Option<egui_winit::State>,
     last_render_time: Option<Instant>,
     #[cfg(target_arch = "wasm32")]
     renderer_receiver: Option<futures::channel::oneshot::Receiver<Renderer>>,
+    #[cfg(target_arch = "wasm32")]
     last_size: (u32, u32),
     initialized: bool,
 }
 
 impl ApplicationHandler for App {
-    fn suspended(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop) {
+    fn destroy_surfaces(&mut self, _event_loop: &dyn ActiveEventLoop) {
         self.renderer = None;
         self.window = None;
     }
 
-    fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
+    fn can_create_surfaces(&mut self, event_loop: &dyn ActiveEventLoop) {
         if self.window.is_some() {
             return;
         }
 
-        let mut attributes = Window::default_attributes();
-
         #[cfg(not(target_arch = "wasm32"))]
-        {
-            attributes = attributes.with_title("Standalone Winit/Wgpu Example");
-        }
-
-        #[allow(unused_assignments)]
-        #[cfg(target_arch = "wasm32")]
-        let (mut canvas_width, mut canvas_height) = (0, 0);
+        let attributes = WindowAttributes::default().with_title("Standalone Winit/Wgpu Example");
 
         #[cfg(target_arch = "wasm32")]
-        {
-            use winit::platform::web::WindowAttributesExtWebSys;
+        let (attributes, canvas_width, canvas_height) = {
             let canvas = wgpu::web_sys::window()
                 .unwrap()
                 .document()
@@ -119,47 +110,24 @@ impl ApplicationHandler for App {
                 .unwrap()
                 .dyn_into::<wgpu::web_sys::HtmlCanvasElement>()
                 .unwrap();
-            canvas_width = canvas.width();
-            canvas_height = canvas.height();
+            let canvas_width = canvas.width();
+            let canvas_height = canvas.height();
             self.last_size = (canvas_width, canvas_height);
-            attributes = attributes.with_canvas(Some(canvas));
-        }
+            let attributes = WindowAttributes::default().with_platform_attributes(Box::new(
+                winit::platform::web::WindowAttributesWeb::default().with_canvas(Some(canvas)),
+            ));
+            (attributes, canvas_width, canvas_height)
+        };
 
         let Ok(window) = event_loop.create_window(attributes) else {
             return;
         };
 
-        let window_handle = Arc::new(window);
+        let window_handle: Arc<dyn Window> = Arc::from(window);
         self.window = Some(window_handle.clone());
 
-        let gui_context = egui::Context::default();
-
         #[cfg(not(target_arch = "wasm32"))]
-        {
-            let inner_size = window_handle.inner_size();
-            self.last_size = (inner_size.width, inner_size.height);
-        }
-
-        #[cfg(target_arch = "wasm32")]
-        {
-            gui_context.set_pixels_per_point(1.0);
-        }
-
-        let viewport_id = gui_context.viewport_id();
-        let gui_state = egui_winit::State::new(
-            gui_context,
-            viewport_id,
-            &window_handle,
-            Some(window_handle.scale_factor() as _),
-            Some(Theme::Dark),
-            None,
-        );
-
-        #[cfg(not(target_arch = "wasm32"))]
-        let (width, height) = (
-            window_handle.inner_size().width,
-            window_handle.inner_size().height,
-        );
+        let PhysicalSize { width, height } = window_handle.surface_size();
 
         #[cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))]
         {
@@ -198,16 +166,15 @@ impl ApplicationHandler for App {
             });
         }
 
-        self.gui_state = Some(gui_state);
         self.last_render_time = Some(Instant::now());
         self.initialized = true;
     }
 
     fn window_event(
         &mut self,
-        event_loop: &winit::event_loop::ActiveEventLoop,
-        _window_id: winit::window::WindowId,
-        event: winit::event::WindowEvent,
+        event_loop: &dyn ActiveEventLoop,
+        _window_id: WindowId,
+        event: WindowEvent,
     ) {
         #[cfg(target_arch = "wasm32")]
         {
@@ -226,18 +193,13 @@ impl ApplicationHandler for App {
             }
         }
 
-        let (Some(gui_state), Some(renderer), Some(window), Some(last_render_time)) = (
-            self.gui_state.as_mut(),
+        let (Some(renderer), Some(window), Some(last_render_time)) = (
             self.renderer.as_mut(),
             self.window.as_ref(),
             self.last_render_time.as_mut(),
         ) else {
             return;
         };
-
-        if gui_state.on_window_event(window, &event).consumed {
-            return;
-        }
 
         match event {
             WindowEvent::KeyboardInput {
@@ -252,24 +214,17 @@ impl ApplicationHandler for App {
                     event_loop.exit();
                 }
             }
-            WindowEvent::ScaleFactorChanged { .. } => {
-                #[cfg(target_arch = "wasm32")]
-                {
-                    gui_state.egui_ctx().set_pixels_per_point(1.0);
-                }
-            }
-            WindowEvent::Resized(PhysicalSize { width, height }) => {
+            WindowEvent::SurfaceResized(PhysicalSize { width, height }) => {
                 if width == 0 || height == 0 {
                     return;
                 }
 
                 log::info!("Resizing renderer surface to: ({width}, {height})");
                 renderer.resize(width, height);
-                self.last_size = (width, height);
 
                 #[cfg(target_arch = "wasm32")]
                 {
-                    gui_state.egui_ctx().set_pixels_per_point(1.0);
+                    self.last_size = (width, height);
                 }
             }
             WindowEvent::CloseRequested => {
@@ -301,128 +256,7 @@ impl ApplicationHandler for App {
                 let delta_time = now - *last_render_time;
                 *last_render_time = now;
 
-                #[cfg(target_arch = "wasm32")]
-                let mut gui_input = gui_state.take_egui_input(window);
-                #[cfg(not(target_arch = "wasm32"))]
-                let gui_input = gui_state.take_egui_input(window);
-
-                #[cfg(target_arch = "wasm32")]
-                {
-                    let canvas = wgpu::web_sys::window()
-                        .unwrap()
-                        .document()
-                        .unwrap()
-                        .get_element_by_id("canvas")
-                        .unwrap()
-                        .dyn_into::<wgpu::web_sys::HtmlCanvasElement>()
-                        .unwrap();
-                    let pixels_per_point = gui_state.egui_ctx().pixels_per_point();
-                    let canvas_size = egui::vec2(
-                        canvas.width() as f32 / pixels_per_point,
-                        canvas.height() as f32 / pixels_per_point,
-                    );
-                    gui_input.screen_rect =
-                        Some(egui::Rect::from_min_size(egui::Pos2::ZERO, canvas_size));
-                }
-
-                #[cfg(all(
-                    not(target_arch = "wasm32"),
-                    not(target_os = "android"),
-                    not(feature = "webgpu"),
-                    not(feature = "webgl"),
-                    not(feature = "android")
-                ))]
-                let title = "Rust/Wgpu";
-
-                #[cfg(feature = "webgpu")]
-                let title = "Rust/Wgpu/Webgpu";
-
-                #[cfg(feature = "webgl")]
-                let title = "Rust/Wgpu/Webgl";
-
-                #[cfg(feature = "android")]
-                let title = "Rust/Wgpu/Android";
-
-                let egui_winit::egui::FullOutput {
-                    textures_delta,
-                    shapes,
-                    pixels_per_point,
-                    platform_output,
-                    ..
-                } = gui_state.egui_ctx().run_ui(gui_input, |ui| {
-                    egui::Panel::top("top").show(ui, |ui| {
-                        ui.horizontal(|ui| {
-                            egui::MenuBar::new().ui(ui, |ui| {
-                                ui.menu_button("File", |ui| {
-                                    if ui.button("Load").clicked() {
-                                        ui.close();
-                                    }
-                                    if ui.button("Save").clicked() {
-                                        ui.close();
-                                    }
-                                    ui.separator();
-                                    if ui.button("Import").clicked() {
-                                        ui.close();
-                                    }
-                                });
-
-                                ui.menu_button("Edit", |ui| {
-                                    if ui.button("Clear").clicked() {
-                                        ui.close();
-                                    }
-                                    if ui.button("Reset").clicked() {
-                                        ui.close();
-                                    }
-                                });
-
-                                ui.separator();
-
-                                ui.label(
-                                    egui::RichText::new(title).color(egui::Color32::LIGHT_GREEN),
-                                );
-
-                                ui.separator();
-                            });
-
-                            ui.with_layout(egui::Layout::right_to_left(egui::Align::RIGHT), |ui| {
-                                ui.add_space(10.0);
-                                ui.label(
-                                    egui::RichText::new("v0.1.0").color(egui::Color32::ORANGE),
-                                );
-                                ui.separator();
-                            });
-                        });
-                    });
-
-                    egui::Panel::left("left").show(ui, |ui| {
-                        ui.heading("Scene Tree");
-                    });
-
-                    egui::Panel::right("right").show(ui, |ui| {
-                        ui.heading("Inspector");
-                    });
-
-                    egui::Panel::bottom("Console").show(ui, |ui| {
-                        ui.heading("Console");
-                    });
-                });
-
-                gui_state.handle_platform_output(window, platform_output);
-
-                let paint_jobs = gui_state.egui_ctx().tessellate(shapes, pixels_per_point);
-
-                let screen_descriptor = {
-                    let (width, height) = self.last_size;
-                    if width == 0 || height == 0 {
-                        return;
-                    }
-                    egui_wgpu::ScreenDescriptor {
-                        size_in_pixels: [width, height],
-                        pixels_per_point,
-                    }
-                };
-
-                renderer.render_frame(screen_descriptor, paint_jobs, textures_delta, delta_time);
+                renderer.render_frame(delta_time);
             }
             _ => (),
         }
@@ -434,7 +268,6 @@ impl ApplicationHandler for App {
 pub struct Renderer {
     gpu: Gpu,
     depth_texture_view: wgpu::TextureView,
-    egui_renderer: egui_wgpu::Renderer,
     scene: Scene,
 }
 
@@ -449,22 +282,11 @@ impl Renderer {
         let gpu = Gpu::new_async(window, width, height).await;
         let depth_texture_view = gpu.create_depth_texture(width, height);
 
-        let egui_renderer = egui_wgpu::Renderer::new(
-            &gpu.device,
-            gpu.surface_config.format,
-            egui_wgpu::RendererOptions {
-                depth_stencil_format: Some(Self::DEPTH_FORMAT),
-                msaa_samples: 1,
-                ..Default::default()
-            },
-        );
-
         let scene = Scene::new(&gpu.device, gpu.surface_format);
 
         Self {
             gpu,
             depth_texture_view,
-            egui_renderer,
             scene,
         }
     }
@@ -474,32 +296,11 @@ impl Renderer {
         self.depth_texture_view = self.gpu.create_depth_texture(width, height);
     }
 
-    pub fn render_frame(
-        &mut self,
-        screen_descriptor: egui_wgpu::ScreenDescriptor,
-        paint_jobs: Vec<egui::epaint::ClippedPrimitive>,
-        textures_delta: egui::TexturesDelta,
-        delta_time: crate::Duration,
-    ) {
+    pub fn render_frame(&mut self, delta_time: Duration) {
         let delta_time = delta_time.as_secs_f32();
 
         self.scene
             .update(&self.gpu.queue, self.gpu.aspect_ratio(), delta_time);
-
-        for (id, image_deltas) in &textures_delta.set {
-            for image_delta in image_deltas {
-                self.egui_renderer.update_texture(
-                    &self.gpu.device,
-                    &self.gpu.queue,
-                    *id,
-                    image_delta,
-                );
-            }
-        }
-
-        for id in &textures_delta.free {
-            self.egui_renderer.free_texture(id);
-        }
 
         let mut encoder = self
             .gpu
@@ -507,14 +308,6 @@ impl Renderer {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("Render Encoder"),
             });
-
-        self.egui_renderer.update_buffers(
-            &self.gpu.device,
-            &self.gpu.queue,
-            &mut encoder,
-            &paint_jobs,
-            &screen_descriptor,
-        );
 
         let surface_texture = match self.gpu.surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(frame)
@@ -582,12 +375,6 @@ impl Renderer {
                 multiview_mask: None,
             });
             self.scene.render(&mut render_pass);
-
-            self.egui_renderer.render(
-                &mut render_pass.forget_lifetime(),
-                &paint_jobs,
-                &screen_descriptor,
-            );
         }
 
         self.gpu.queue.submit(std::iter::once(encoder.finish()));
