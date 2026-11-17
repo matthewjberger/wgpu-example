@@ -1,8 +1,10 @@
 use crate::Scene;
 use ash::vk::{self, Handle};
 use openxr as xr;
-use std::ffi::{CString, c_void};
+use std::ffi::{CString, c_char, c_void};
 use web_time::Instant;
+
+const MULTIVIEW_MASK: Option<std::num::NonZeroU32> = std::num::NonZeroU32::new(0b11);
 
 const VK_TARGET_VERSION: xr::Version = xr::Version::new(1, 1, 0);
 const VK_TARGET_VERSION_ASH: u32 = vk::make_api_version(
@@ -14,64 +16,91 @@ const VK_TARGET_VERSION_ASH: u32 = vk::make_api_version(
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+struct MeshUniform {
+    mvp: [[[f32; 4]; 4]; 2],
+}
+
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 struct GridUniform {
-    view_proj: [[f32; 4]; 4],
-    camera_world_pos: [f32; 3],
+    view_proj: [[[f32; 4]; 4]; 2],
+    camera_world_pos: [[f32; 4]; 2],
     grid_size: f32,
     grid_min_pixels: f32,
     grid_cell_size: f32,
     orthographic_scale: f32,
     is_orthographic: f32,
+    _padding: [f32; 3],
 }
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 struct SkyUniform {
-    proj: [[f32; 4]; 4],
-    proj_inv: [[f32; 4]; 4],
-    view: [[f32; 4]; 4],
-    cam_pos: [f32; 4],
+    proj_inv: [[[f32; 4]; 4]; 2],
+    view: [[[f32; 4]; 4]; 2],
 }
 
 pub struct XrContext {
-    _vk_entry: ash::Entry,
-    _vk_instance: ash::Instance,
-    instance: xr::Instance,
-    _system: xr::SystemId,
-    session: xr::Session<xr::Vulkan>,
-    frame_wait: xr::FrameWaiter,
-    frame_stream: xr::FrameStream<xr::Vulkan>,
-    stage: xr::Space,
-    swapchain: xr::Swapchain<xr::Vulkan>,
     swapchain_buffers: Vec<wgpu::Texture>,
-    resolution: (u32, u32),
-    _views: Vec<xr::ViewConfigurationView>,
-    action_set: xr::ActionSet,
-    move_action: xr::Action<xr::Vector2f>,
-    left_hand_action: xr::Action<xr::Posef>,
-    right_hand_action: xr::Action<xr::Posef>,
-    left_trigger_action: xr::Action<f32>,
-    right_trigger_action: xr::Action<f32>,
-    left_hand_space: xr::Space,
-    right_hand_space: xr::Space,
-    player_position: nalgebra_glm::Vec3,
+    depth_view: wgpu::TextureView,
+    _depth_texture: wgpu::Texture,
     cube_vertex_buffer: wgpu::Buffer,
     cube_index_buffer: wgpu::Buffer,
     green_cube_vertex_buffer: wgpu::Buffer,
+    mesh_uniform_buffer: wgpu::Buffer,
+    mesh_bind_group: wgpu::BindGroup,
+    mesh_pipeline: wgpu::RenderPipeline,
     grid_uniform_buffer: wgpu::Buffer,
     grid_bind_group: wgpu::BindGroup,
     grid_pipeline: wgpu::RenderPipeline,
     sky_uniform_buffer: wgpu::Buffer,
     sky_bind_group: wgpu::BindGroup,
     sky_pipeline: wgpu::RenderPipeline,
+    swapchain: xr::Swapchain<xr::Vulkan>,
+    stage: xr::Space,
+    left_hand_space: xr::Space,
+    right_hand_space: xr::Space,
+    move_action: xr::Action<xr::Vector2f>,
+    left_trigger_action: xr::Action<f32>,
+    right_trigger_action: xr::Action<f32>,
+    action_set: xr::ActionSet,
+    frame_stream: xr::FrameStream<xr::Vulkan>,
+    frame_wait: xr::FrameWaiter,
+    session: xr::Session<xr::Vulkan>,
+    _views: Vec<xr::ViewConfigurationView>,
+    _system: xr::SystemId,
+    instance: xr::Instance,
+    _vk_instance: ash::Instance,
+    _vk_entry: ash::Entry,
+    resolution: (u32, u32),
+    player_position: nalgebra_glm::Vec3,
+    session_running: bool,
 }
 
 impl XrContext {
     pub fn new() -> Result<(Self, wgpu::Device, wgpu::Queue), Box<dyn std::error::Error>> {
-        let xr_entry = xr::Entry::linked();
+        #[cfg(not(target_os = "android"))]
+        let platform_info = ();
+
+        #[cfg(target_os = "android")]
+        let platform_info = {
+            let android_context = ndk_context::android_context();
+            unsafe { xr::AndroidPlatformInfo::new(android_context.vm(), android_context.context()) }
+        };
+
+        #[cfg(not(target_os = "android"))]
+        let xr_entry = xr::Entry::linked(&platform_info)?;
+
+        #[cfg(target_os = "android")]
+        let xr_entry = unsafe { xr::Entry::load(&platform_info)? };
 
         let mut required_extensions = xr::ExtensionSet::default();
         required_extensions.khr_vulkan_enable2 = true;
+
+        #[cfg(target_os = "android")]
+        {
+            required_extensions.khr_android_create_instance = true;
+        }
 
         let xr_instance = xr_entry.create_instance(
             &xr::ApplicationInfo {
@@ -83,6 +112,7 @@ impl XrContext {
             },
             &required_extensions,
             &[],
+            &platform_info,
         )?;
 
         let system = xr_instance.system(xr::FormFactor::HEAD_MOUNTED_DISPLAY)?;
@@ -131,7 +161,18 @@ impl XrContext {
             let vk_instance = xr_instance
                 .create_vulkan_instance(
                     system,
-                    std::mem::transmute(vk_entry.static_fn().get_instance_proc_addr),
+                    std::mem::transmute::<
+                        unsafe extern "system" fn(
+                            vk::Instance,
+                            *const c_char,
+                        )
+                            -> Option<unsafe extern "system" fn()>,
+                        unsafe extern "system" fn(
+                            *const c_void,
+                            *const c_char,
+                        )
+                            -> Option<unsafe extern "system" fn()>,
+                    >(vk_entry.static_fn().get_instance_proc_addr),
                     &vk::InstanceCreateInfo::default()
                         .application_info(&vk_app_info)
                         .enabled_extension_names(&extensions_cchar) as *const _
@@ -183,7 +224,7 @@ impl XrContext {
             .adapter
             .required_device_extensions(wgpu_features);
 
-        let device_exts = vec![ash::khr::swapchain::NAME];
+        let device_exts = [ash::khr::swapchain::NAME];
 
         let (wgpu_open_device, vk_device_ptr, queue_family_index) = {
             let extensions_cchar: Vec<_> = device_exts.iter().map(|s| s.as_ptr()).collect();
@@ -211,7 +252,18 @@ impl XrContext {
                 let vk_device = xr_instance
                     .create_vulkan_device(
                         system,
-                        std::mem::transmute(vk_entry.static_fn().get_instance_proc_addr),
+                        std::mem::transmute::<
+                            unsafe extern "system" fn(
+                                vk::Instance,
+                                *const c_char,
+                            )
+                                -> Option<unsafe extern "system" fn()>,
+                            unsafe extern "system" fn(
+                                *const c_void,
+                                *const c_char,
+                            )
+                                -> Option<unsafe extern "system" fn()>,
+                        >(vk_entry.static_fn().get_instance_proc_addr),
                         vk_physical_device.as_raw() as _,
                         &info as *const _ as *const _,
                     )?
@@ -227,6 +279,7 @@ impl XrContext {
                     None,
                     &enabled_extensions,
                     wgpu_features,
+                    &wgpu::Limits::default(),
                     &wgpu::MemoryHints::Performance,
                     family_info.queue_family_index,
                     0,
@@ -315,10 +368,10 @@ impl XrContext {
         session.attach_action_sets(&[&action_set])?;
 
         let left_hand_space =
-            left_hand_action.create_space(session.clone(), xr::Path::NULL, xr::Posef::IDENTITY)?;
+            left_hand_action.create_space(&session, xr::Path::NULL, xr::Posef::IDENTITY)?;
 
         let right_hand_space =
-            right_hand_action.create_space(session.clone(), xr::Path::NULL, xr::Posef::IDENTITY)?;
+            right_hand_action.create_space(&session, xr::Path::NULL, xr::Posef::IDENTITY)?;
 
         let stage =
             session.create_reference_space(xr::ReferenceSpaceType::STAGE, xr::Posef::IDENTITY)?;
@@ -363,6 +416,7 @@ impl XrContext {
                             view_formats: vec![],
                         },
                         None,
+                        wgpu_hal::vulkan::TextureMemory::External,
                     )
                 };
                 let texture = unsafe {
@@ -383,6 +437,7 @@ impl XrContext {
                                 | wgpu::TextureUsages::COPY_DST,
                             view_formats: &[],
                         },
+                        wgpu::TextureUses::UNINITIALIZED,
                     )
                 };
                 Ok(texture)
@@ -415,6 +470,88 @@ impl XrContext {
                 usage: wgpu::BufferUsages::VERTEX,
             },
         );
+
+        let mesh_uniform_buffer = wgpu_device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Mesh Uniform Buffer"),
+            size: std::mem::size_of::<MeshUniform>() as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+
+        let mesh_bind_group_layout =
+            wgpu_device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }],
+                label: Some("Mesh Bind Group Layout"),
+            });
+
+        let mesh_bind_group = wgpu_device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &mesh_bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: mesh_uniform_buffer.as_entire_binding(),
+            }],
+            label: Some("Mesh Bind Group"),
+        });
+
+        let mesh_shader = wgpu_device.create_shader_module(wgpu::include_wgsl!("mesh.wgsl"));
+
+        let mesh_pipeline_layout =
+            wgpu_device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Mesh Pipeline Layout"),
+                bind_group_layouts: &[Some(&mesh_bind_group_layout)],
+                immediate_size: 0,
+            });
+
+        let mesh_pipeline = wgpu_device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("Mesh Pipeline"),
+            layout: Some(&mesh_pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &mesh_shader,
+                entry_point: Some("vertex_main"),
+                buffers: &[Some(crate::Vertex::description(
+                    &crate::Vertex::vertex_attributes(),
+                ))],
+                compilation_options: Default::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &mesh_shader,
+                entry_point: Some("fragment_main"),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: wgpu::TextureFormat::Rgba8UnormSrgb,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+                compilation_options: Default::default(),
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleStrip,
+                strip_index_format: Some(wgpu::IndexFormat::Uint32),
+                front_face: wgpu::FrontFace::Cw,
+                cull_mode: None,
+                unclipped_depth: false,
+                polygon_mode: wgpu::PolygonMode::Fill,
+                conservative: false,
+            },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: wgpu::TextureFormat::Depth32Float,
+                depth_write_enabled: Some(true),
+                depth_compare: Some(wgpu::CompareFunction::Less),
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
+            multisample: wgpu::MultisampleState::default(),
+            multiview_mask: MULTIVIEW_MASK,
+            cache: None,
+        });
 
         let grid_uniform_buffer = wgpu_device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Grid Uniform Buffer"),
@@ -452,8 +589,8 @@ impl XrContext {
         let grid_pipeline_layout =
             wgpu_device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Grid Pipeline Layout"),
-                bind_group_layouts: &[&grid_bind_group_layout],
-                push_constant_ranges: &[],
+                bind_group_layouts: &[Some(&grid_bind_group_layout)],
+                immediate_size: 0,
             });
 
         let grid_pipeline = wgpu_device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -493,8 +630,8 @@ impl XrContext {
             },
             depth_stencil: Some(wgpu::DepthStencilState {
                 format: wgpu::TextureFormat::Depth32Float,
-                depth_write_enabled: false,
-                depth_compare: wgpu::CompareFunction::LessEqual,
+                depth_write_enabled: Some(false),
+                depth_compare: Some(wgpu::CompareFunction::LessEqual),
                 stencil: wgpu::StencilState::default(),
                 bias: wgpu::DepthBiasState {
                     constant: 2,
@@ -503,7 +640,7 @@ impl XrContext {
                 },
             }),
             multisample: wgpu::MultisampleState::default(),
-            multiview: None,
+            multiview_mask: MULTIVIEW_MASK,
             cache: None,
         });
 
@@ -543,8 +680,8 @@ impl XrContext {
         let sky_pipeline_layout =
             wgpu_device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Sky Pipeline Layout"),
-                bind_group_layouts: &[&sky_bind_group_layout],
-                push_constant_ranges: &[],
+                bind_group_layouts: &[Some(&sky_bind_group_layout)],
+                immediate_size: 0,
             });
 
         let sky_pipeline = wgpu_device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -574,8 +711,35 @@ impl XrContext {
             },
             depth_stencil: None,
             multisample: wgpu::MultisampleState::default(),
-            multiview: None,
+            multiview_mask: MULTIVIEW_MASK,
             cache: None,
+        });
+
+        let depth_texture = wgpu_device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("XR Depth Texture"),
+            size: wgpu::Extent3d {
+                width: resolution.0,
+                height: resolution.1,
+                depth_or_array_layers: 2,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Depth32Float,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            view_formats: &[],
+        });
+
+        let depth_view = depth_texture.create_view(&wgpu::TextureViewDescriptor {
+            label: Some("XR Depth View"),
+            format: Some(wgpu::TextureFormat::Depth32Float),
+            dimension: Some(wgpu::TextureViewDimension::D2Array),
+            aspect: wgpu::TextureAspect::All,
+            base_mip_level: 0,
+            mip_level_count: None,
+            base_array_layer: 0,
+            array_layer_count: Some(2),
+            usage: None,
         });
 
         log::info!("OpenXR session created successfully");
@@ -596,8 +760,6 @@ impl XrContext {
                 _views: views,
                 action_set,
                 move_action,
-                left_hand_action,
-                right_hand_action,
                 left_trigger_action,
                 right_trigger_action,
                 left_hand_space,
@@ -606,12 +768,18 @@ impl XrContext {
                 cube_vertex_buffer,
                 cube_index_buffer,
                 green_cube_vertex_buffer,
+                mesh_uniform_buffer,
+                mesh_bind_group,
+                mesh_pipeline,
                 grid_uniform_buffer,
                 grid_bind_group,
                 grid_pipeline,
                 sky_uniform_buffer,
                 sky_bind_group,
                 sky_pipeline,
+                depth_view,
+                _depth_texture: depth_texture,
+                session_running: false,
             },
             wgpu_device,
             wgpu_queue,
@@ -628,13 +796,16 @@ impl XrContext {
                         xr::SessionState::READY => {
                             self.session
                                 .begin(xr::ViewConfigurationType::PRIMARY_STEREO)?;
+                            self.session_running = true;
                             log::info!("XR Session started");
                         }
                         xr::SessionState::STOPPING => {
+                            self.session_running = false;
                             self.session.end()?;
                             log::info!("XR Session ended");
                         }
                         xr::SessionState::EXITING | xr::SessionState::LOSS_PENDING => {
+                            self.session_running = false;
                             log::info!("XR Session exiting");
                             return Ok(false);
                         }
@@ -649,6 +820,48 @@ impl XrContext {
             }
         }
         Ok(true)
+    }
+
+    pub fn is_session_running(&self) -> bool {
+        self.session_running
+    }
+
+    pub fn shutdown(&mut self) {
+        if !self.session_running {
+            return;
+        }
+
+        if let Err(error) = self.session.request_exit() {
+            log::warn!("xrRequestExitSession failed during shutdown: {error}");
+            self.session_running = false;
+            return;
+        }
+
+        let mut event_buffer = xr::EventDataBuffer::new();
+        for _ in 0..200 {
+            match self.instance.poll_event(&mut event_buffer) {
+                Ok(Some(xr::Event::SessionStateChanged(state_change))) => {
+                    match state_change.state() {
+                        xr::SessionState::STOPPING => {
+                            if let Err(error) = self.session.end() {
+                                log::warn!("xrEndSession failed during shutdown: {error}");
+                                break;
+                            }
+                        }
+                        xr::SessionState::EXITING => break,
+                        _ => {}
+                    }
+                }
+                Ok(Some(_)) => {}
+                Ok(None) => std::thread::sleep(std::time::Duration::from_millis(10)),
+                Err(error) => {
+                    log::warn!("Event polling failed during shutdown: {error}");
+                    break;
+                }
+            }
+        }
+
+        self.session_running = false;
     }
 
     pub fn wait_frame(&mut self) -> Result<xr::FrameState, Box<dyn std::error::Error>> {
@@ -740,7 +953,23 @@ impl XrContext {
         let swapchain_texture = &self.swapchain_buffers[image_index as usize];
         let resolution = self.resolution;
 
-        for (view_index, view) in views.iter().enumerate() {
+        let color_view = swapchain_texture.create_view(&wgpu::TextureViewDescriptor {
+            label: Some("XR Color View"),
+            format: Some(wgpu::TextureFormat::Rgba8UnormSrgb),
+            dimension: Some(wgpu::TextureViewDimension::D2Array),
+            aspect: wgpu::TextureAspect::All,
+            base_mip_level: 0,
+            mip_level_count: None,
+            base_array_layer: 0,
+            array_layer_count: Some(2),
+            usage: None,
+        });
+
+        let mut view_matrices = [nalgebra_glm::Mat4::identity(); 2];
+        let mut projection_matrices = [nalgebra_glm::Mat4::identity(); 2];
+        let mut camera_positions = [nalgebra_glm::Vec3::zeros(); 2];
+
+        for (view_index, view) in views.iter().enumerate().take(2) {
             let pose = &view.pose;
             let fov = &view.fov;
 
@@ -798,100 +1027,244 @@ impl XrContext {
                 proj
             };
 
-            let view_texture_view = swapchain_texture.create_view(&wgpu::TextureViewDescriptor {
-                label: Some(&format!("XR View {}", view_index)),
-                format: Some(wgpu::TextureFormat::Rgba8UnormSrgb),
-                dimension: Some(wgpu::TextureViewDimension::D2),
-                aspect: wgpu::TextureAspect::All,
-                base_mip_level: 0,
-                mip_level_count: None,
-                base_array_layer: view_index as u32,
-                array_layer_count: Some(1),
-                usage: None,
-            });
-
-            let depth_texture = device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("XR Depth Texture"),
-                size: wgpu::Extent3d {
-                    width: resolution.0,
-                    height: resolution.1,
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Depth32Float,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-                view_formats: &[],
-            });
-
-            let depth_view = depth_texture.create_view(&wgpu::TextureViewDescriptor::default());
-
             let camera_position = {
-                let pose = &view.pose;
                 let translation =
                     nalgebra_glm::vec3(-pose.position.x, pose.position.y, -pose.position.z);
                 translation + self.player_position
             };
 
-            let sky_uniform = SkyUniform {
-                proj: projection_matrix.into(),
-                proj_inv: nalgebra_glm::inverse(&projection_matrix).into(),
-                view: view_matrix.into(),
-                cam_pos: [camera_position.x, camera_position.y, camera_position.z, 1.0],
-            };
-            queue.write_buffer(
-                &self.sky_uniform_buffer,
-                0,
-                bytemuck::cast_slice(&[sky_uniform]),
-            );
+            view_matrices[view_index] = view_matrix;
+            projection_matrices[view_index] = projection_matrix;
+            camera_positions[view_index] = camera_position;
+        }
 
-            let mut sky_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Sky Render Encoder"),
+        let sky_uniform = SkyUniform {
+            proj_inv: [
+                nalgebra_glm::inverse(&projection_matrices[0]).into(),
+                nalgebra_glm::inverse(&projection_matrices[1]).into(),
+            ],
+            view: [view_matrices[0].into(), view_matrices[1].into()],
+        };
+        queue.write_buffer(
+            &self.sky_uniform_buffer,
+            0,
+            bytemuck::cast_slice(&[sky_uniform]),
+        );
+
+        let mut sky_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("Sky Render Encoder"),
+        });
+
+        {
+            let mut render_pass = sky_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Sky Render Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &color_view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                        store: wgpu::StoreOp::Store,
+                    },
+                    depth_slice: None,
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: MULTIVIEW_MASK,
             });
 
-            {
-                let mut render_pass = sky_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some("Sky Render Pass"),
-                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &view_texture_view,
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                            store: wgpu::StoreOp::Store,
-                        },
-                        depth_slice: None,
-                    })],
-                    depth_stencil_attachment: None,
-                    timestamp_writes: None,
-                    occlusion_query_set: None,
-                });
+            render_pass.set_pipeline(&self.sky_pipeline);
+            render_pass.set_bind_group(0, &self.sky_bind_group, &[]);
+            render_pass.draw(0..3, 0..1);
+        }
 
-                render_pass.set_pipeline(&self.sky_pipeline);
-                render_pass.set_bind_group(0, &self.sky_bind_group, &[]);
-                render_pass.draw(0..3, 0..1);
-            }
+        queue.submit(std::iter::once(sky_encoder.finish()));
 
-            queue.submit(std::iter::once(sky_encoder.finish()));
+        let model_translation = nalgebra_glm::translation(&nalgebra_glm::vec3(0.0, 1.5, 2.0));
+        let model = model_translation * scene.model;
+        let triangle_uniform = MeshUniform {
+            mvp: [
+                (projection_matrices[0] * view_matrices[0] * model).into(),
+                (projection_matrices[1] * view_matrices[1] * model).into(),
+            ],
+        };
+        queue.write_buffer(
+            &self.mesh_uniform_buffer,
+            0,
+            bytemuck::cast_slice(&[triangle_uniform]),
+        );
 
-            let model_translation = nalgebra_glm::translation(&nalgebra_glm::vec3(0.0, 1.5, 2.0));
-            let model = model_translation * scene.model;
-            let triangle_mvp = projection_matrix * view_matrix * model;
-            scene
-                .uniform
-                .update_buffer(queue, 0, crate::UniformBuffer { mvp: triangle_mvp });
+        let mut triangle_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("Triangle Render Encoder"),
+        });
 
-            let mut triangle_encoder =
+        {
+            let mut render_pass = triangle_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Triangle Render Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &color_view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                    depth_slice: None,
+                })],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &self.depth_view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: MULTIVIEW_MASK,
+            });
+
+            render_pass.set_pipeline(&self.mesh_pipeline);
+            render_pass.set_bind_group(0, &self.mesh_bind_group, &[]);
+            render_pass.set_vertex_buffer(0, scene.vertex_buffer.slice(..));
+            render_pass.set_index_buffer(scene.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+            render_pass.draw_indexed(0..3, 0, 0..1);
+        }
+
+        queue.submit(std::iter::once(triangle_encoder.finish()));
+
+        let grid_uniform = GridUniform {
+            view_proj: [
+                (projection_matrices[0] * view_matrices[0]).into(),
+                (projection_matrices[1] * view_matrices[1]).into(),
+            ],
+            camera_world_pos: [
+                [
+                    camera_positions[0].x,
+                    camera_positions[0].y,
+                    camera_positions[0].z,
+                    1.0,
+                ],
+                [
+                    camera_positions[1].x,
+                    camera_positions[1].y,
+                    camera_positions[1].z,
+                    1.0,
+                ],
+            ],
+            grid_size: 100.0,
+            grid_min_pixels: 2.0,
+            grid_cell_size: 0.025,
+            orthographic_scale: 1.0,
+            is_orthographic: 0.0,
+            _padding: [0.0; 3],
+        };
+        queue.write_buffer(
+            &self.grid_uniform_buffer,
+            0,
+            bytemuck::cast_slice(&[grid_uniform]),
+        );
+
+        let mut grid_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("Grid Render Encoder"),
+        });
+
+        {
+            let mut render_pass = grid_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Grid Render Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &color_view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                    depth_slice: None,
+                })],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &self.depth_view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: MULTIVIEW_MASK,
+            });
+
+            render_pass.set_pipeline(&self.grid_pipeline);
+            render_pass.set_bind_group(0, &self.grid_bind_group, &[]);
+            render_pass.draw(0..6, 0..1);
+        }
+
+        queue.submit(std::iter::once(grid_encoder.finish()));
+
+        let left_hand_location = self
+            .left_hand_space
+            .locate(&self.stage, frame_state.predicted_display_time);
+        if let Ok(location) = left_hand_location
+            && location.location_flags.contains(
+                xr::SpaceLocationFlags::POSITION_VALID | xr::SpaceLocationFlags::ORIENTATION_VALID,
+            )
+        {
+            let hand_pose = location.pose;
+            let rotation = {
+                let o = hand_pose.orientation;
+                let flip_x = nalgebra_glm::quat_angle_axis(
+                    180.0_f32.to_radians(),
+                    &nalgebra_glm::vec3(1.0, 0.0, 0.0),
+                );
+                let openxr_quat = nalgebra_glm::quat(o.w, o.z, o.y, o.x);
+                flip_x * openxr_quat
+            };
+            let translation = nalgebra_glm::vec3(
+                -hand_pose.position.x,
+                hand_pose.position.y,
+                -hand_pose.position.z,
+            );
+            let hand_world_position = translation + self.player_position;
+
+            let rotation_matrix = nalgebra_glm::quat_to_mat4(&rotation);
+            let translation_matrix = nalgebra_glm::translation(&hand_world_position);
+            let hand_model = translation_matrix * rotation_matrix;
+
+            let left_hand_uniform = MeshUniform {
+                mvp: [
+                    (projection_matrices[0] * view_matrices[0] * hand_model).into(),
+                    (projection_matrices[1] * view_matrices[1] * hand_model).into(),
+                ],
+            };
+            queue.write_buffer(
+                &self.mesh_uniform_buffer,
+                0,
+                bytemuck::cast_slice(&[left_hand_uniform]),
+            );
+
+            let left_trigger_state = self
+                .left_trigger_action
+                .state(&self.session, xr::Path::NULL)
+                .ok();
+            let left_trigger_pulled = left_trigger_state
+                .map(|s| s.current_state > 0.5)
+                .unwrap_or(false);
+            let left_cube_buffer = if left_trigger_pulled {
+                &self.green_cube_vertex_buffer
+            } else {
+                &self.cube_vertex_buffer
+            };
+
+            let mut left_hand_encoder =
                 device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                    label: Some("Triangle Render Encoder"),
+                    label: Some("Left Hand Encoder"),
                 });
 
             {
                 let mut render_pass =
-                    triangle_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                        label: Some("Triangle Render Pass"),
+                    left_hand_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                        label: Some("Left Hand Render Pass"),
                         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                            view: &view_texture_view,
+                            view: &color_view,
                             resolve_target: None,
                             ops: wgpu::Operations {
                                 load: wgpu::LoadOp::Load,
@@ -900,263 +1273,123 @@ impl XrContext {
                             depth_slice: None,
                         })],
                         depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                            view: &depth_view,
+                            view: &self.depth_view,
                             depth_ops: Some(wgpu::Operations {
-                                load: wgpu::LoadOp::Clear(1.0),
+                                load: wgpu::LoadOp::Load,
                                 store: wgpu::StoreOp::Store,
                             }),
                             stencil_ops: None,
                         }),
                         timestamp_writes: None,
                         occlusion_query_set: None,
+                        multiview_mask: MULTIVIEW_MASK,
                     });
 
-                scene.render(&mut render_pass);
+                render_pass.set_pipeline(&self.mesh_pipeline);
+                render_pass.set_bind_group(0, &self.mesh_bind_group, &[]);
+                render_pass.set_vertex_buffer(0, left_cube_buffer.slice(..));
+                render_pass
+                    .set_index_buffer(self.cube_index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+                render_pass.draw_indexed(0..36, 0, 0..1);
             }
 
-            queue.submit(std::iter::once(triangle_encoder.finish()));
+            queue.submit(std::iter::once(left_hand_encoder.finish()));
+        }
 
-            let grid_uniform = GridUniform {
-                view_proj: (projection_matrix * view_matrix).into(),
-                camera_world_pos: [camera_position.x, camera_position.y, camera_position.z],
-                grid_size: 100.0,
-                grid_min_pixels: 2.0,
-                grid_cell_size: 0.025,
-                orthographic_scale: 1.0,
-                is_orthographic: 0.0,
+        let right_hand_location = self
+            .right_hand_space
+            .locate(&self.stage, frame_state.predicted_display_time);
+        if let Ok(location) = right_hand_location
+            && location.location_flags.contains(
+                xr::SpaceLocationFlags::POSITION_VALID | xr::SpaceLocationFlags::ORIENTATION_VALID,
+            )
+        {
+            let hand_pose = location.pose;
+            let rotation = {
+                let o = hand_pose.orientation;
+                let flip_x = nalgebra_glm::quat_angle_axis(
+                    180.0_f32.to_radians(),
+                    &nalgebra_glm::vec3(1.0, 0.0, 0.0),
+                );
+                let openxr_quat = nalgebra_glm::quat(o.w, o.z, o.y, o.x);
+                flip_x * openxr_quat
+            };
+            let translation = nalgebra_glm::vec3(
+                -hand_pose.position.x,
+                hand_pose.position.y,
+                -hand_pose.position.z,
+            );
+            let hand_world_position = translation + self.player_position;
+
+            let rotation_matrix = nalgebra_glm::quat_to_mat4(&rotation);
+            let translation_matrix = nalgebra_glm::translation(&hand_world_position);
+            let hand_model = translation_matrix * rotation_matrix;
+
+            let right_hand_uniform = MeshUniform {
+                mvp: [
+                    (projection_matrices[0] * view_matrices[0] * hand_model).into(),
+                    (projection_matrices[1] * view_matrices[1] * hand_model).into(),
+                ],
             };
             queue.write_buffer(
-                &self.grid_uniform_buffer,
+                &self.mesh_uniform_buffer,
                 0,
-                bytemuck::cast_slice(&[grid_uniform]),
+                bytemuck::cast_slice(&[right_hand_uniform]),
             );
 
-            let mut grid_encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Grid Render Encoder"),
-            });
+            let right_trigger_state = self
+                .right_trigger_action
+                .state(&self.session, xr::Path::NULL)
+                .ok();
+            let right_trigger_pulled = right_trigger_state
+                .map(|s| s.current_state > 0.5)
+                .unwrap_or(false);
+            let right_cube_buffer = if right_trigger_pulled {
+                &self.green_cube_vertex_buffer
+            } else {
+                &self.cube_vertex_buffer
+            };
 
-            {
-                let mut render_pass = grid_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                    label: Some("Grid Render Pass"),
-                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                        view: &view_texture_view,
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Load,
-                            store: wgpu::StoreOp::Store,
-                        },
-                        depth_slice: None,
-                    })],
-                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                        view: &depth_view,
-                        depth_ops: Some(wgpu::Operations {
-                            load: wgpu::LoadOp::Load,
-                            store: wgpu::StoreOp::Store,
-                        }),
-                        stencil_ops: None,
-                    }),
-                    timestamp_writes: None,
-                    occlusion_query_set: None,
+            let mut right_hand_encoder =
+                device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("Right Hand Encoder"),
                 });
 
-                render_pass.set_pipeline(&self.grid_pipeline);
-                render_pass.set_bind_group(0, &self.grid_bind_group, &[]);
-                render_pass.draw(0..6, 0..1);
+            {
+                let mut render_pass =
+                    right_hand_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                        label: Some("Right Hand Render Pass"),
+                        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                            view: &color_view,
+                            resolve_target: None,
+                            ops: wgpu::Operations {
+                                load: wgpu::LoadOp::Load,
+                                store: wgpu::StoreOp::Store,
+                            },
+                            depth_slice: None,
+                        })],
+                        depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                            view: &self.depth_view,
+                            depth_ops: Some(wgpu::Operations {
+                                load: wgpu::LoadOp::Load,
+                                store: wgpu::StoreOp::Store,
+                            }),
+                            stencil_ops: None,
+                        }),
+                        timestamp_writes: None,
+                        occlusion_query_set: None,
+                        multiview_mask: MULTIVIEW_MASK,
+                    });
+
+                render_pass.set_pipeline(&self.mesh_pipeline);
+                render_pass.set_bind_group(0, &self.mesh_bind_group, &[]);
+                render_pass.set_vertex_buffer(0, right_cube_buffer.slice(..));
+                render_pass
+                    .set_index_buffer(self.cube_index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+                render_pass.draw_indexed(0..36, 0, 0..1);
             }
 
-            queue.submit(std::iter::once(grid_encoder.finish()));
-
-            let left_hand_location = self
-                .left_hand_space
-                .locate(&self.stage, frame_state.predicted_display_time);
-            if let Ok(location) = left_hand_location {
-                if location.location_flags.contains(
-                    xr::SpaceLocationFlags::POSITION_VALID
-                        | xr::SpaceLocationFlags::ORIENTATION_VALID,
-                ) {
-                    let hand_pose = location.pose;
-                    let rotation = {
-                        let o = hand_pose.orientation;
-                        let flip_x = nalgebra_glm::quat_angle_axis(
-                            180.0_f32.to_radians(),
-                            &nalgebra_glm::vec3(1.0, 0.0, 0.0),
-                        );
-                        let openxr_quat = nalgebra_glm::quat(o.w, o.z, o.y, o.x);
-                        flip_x * openxr_quat
-                    };
-                    let translation = nalgebra_glm::vec3(
-                        -hand_pose.position.x,
-                        hand_pose.position.y,
-                        -hand_pose.position.z,
-                    );
-                    let hand_world_position = translation + self.player_position;
-
-                    let rotation_matrix = nalgebra_glm::quat_to_mat4(&rotation);
-                    let translation_matrix = nalgebra_glm::translation(&hand_world_position);
-                    let hand_model = translation_matrix * rotation_matrix;
-
-                    let left_hand_mvp = projection_matrix * view_matrix * hand_model;
-                    scene.uniform.update_buffer(
-                        queue,
-                        0,
-                        crate::UniformBuffer { mvp: left_hand_mvp },
-                    );
-
-                    let left_trigger_state = self
-                        .left_trigger_action
-                        .state(&self.session, xr::Path::NULL)
-                        .ok();
-                    let left_trigger_pulled = left_trigger_state
-                        .map(|s| s.current_state > 0.5)
-                        .unwrap_or(false);
-                    let left_cube_buffer = if left_trigger_pulled {
-                        &self.green_cube_vertex_buffer
-                    } else {
-                        &self.cube_vertex_buffer
-                    };
-
-                    let mut left_hand_encoder =
-                        device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                            label: Some("Left Hand Encoder"),
-                        });
-
-                    {
-                        let mut render_pass =
-                            left_hand_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                                label: Some("Left Hand Render Pass"),
-                                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                                    view: &view_texture_view,
-                                    resolve_target: None,
-                                    ops: wgpu::Operations {
-                                        load: wgpu::LoadOp::Load,
-                                        store: wgpu::StoreOp::Store,
-                                    },
-                                    depth_slice: None,
-                                })],
-                                depth_stencil_attachment: Some(
-                                    wgpu::RenderPassDepthStencilAttachment {
-                                        view: &depth_view,
-                                        depth_ops: Some(wgpu::Operations {
-                                            load: wgpu::LoadOp::Load,
-                                            store: wgpu::StoreOp::Store,
-                                        }),
-                                        stencil_ops: None,
-                                    },
-                                ),
-                                timestamp_writes: None,
-                                occlusion_query_set: None,
-                            });
-
-                        render_pass.set_pipeline(&scene.pipeline);
-                        render_pass.set_bind_group(0, &scene.uniform.bind_group, &[]);
-                        render_pass.set_vertex_buffer(0, left_cube_buffer.slice(..));
-                        render_pass.set_index_buffer(
-                            self.cube_index_buffer.slice(..),
-                            wgpu::IndexFormat::Uint32,
-                        );
-                        render_pass.draw_indexed(0..36, 0, 0..1);
-                    }
-
-                    queue.submit(std::iter::once(left_hand_encoder.finish()));
-                }
-            }
-
-            let right_hand_location = self
-                .right_hand_space
-                .locate(&self.stage, frame_state.predicted_display_time);
-            if let Ok(location) = right_hand_location {
-                if location.location_flags.contains(
-                    xr::SpaceLocationFlags::POSITION_VALID
-                        | xr::SpaceLocationFlags::ORIENTATION_VALID,
-                ) {
-                    let hand_pose = location.pose;
-                    let rotation = {
-                        let o = hand_pose.orientation;
-                        let flip_x = nalgebra_glm::quat_angle_axis(
-                            180.0_f32.to_radians(),
-                            &nalgebra_glm::vec3(1.0, 0.0, 0.0),
-                        );
-                        let openxr_quat = nalgebra_glm::quat(o.w, o.z, o.y, o.x);
-                        flip_x * openxr_quat
-                    };
-                    let translation = nalgebra_glm::vec3(
-                        -hand_pose.position.x,
-                        hand_pose.position.y,
-                        -hand_pose.position.z,
-                    );
-                    let hand_world_position = translation + self.player_position;
-
-                    let rotation_matrix = nalgebra_glm::quat_to_mat4(&rotation);
-                    let translation_matrix = nalgebra_glm::translation(&hand_world_position);
-                    let hand_model = translation_matrix * rotation_matrix;
-
-                    let right_hand_mvp = projection_matrix * view_matrix * hand_model;
-                    scene.uniform.update_buffer(
-                        queue,
-                        0,
-                        crate::UniformBuffer {
-                            mvp: right_hand_mvp,
-                        },
-                    );
-
-                    let right_trigger_state = self
-                        .right_trigger_action
-                        .state(&self.session, xr::Path::NULL)
-                        .ok();
-                    let right_trigger_pulled = right_trigger_state
-                        .map(|s| s.current_state > 0.5)
-                        .unwrap_or(false);
-                    let right_cube_buffer = if right_trigger_pulled {
-                        &self.green_cube_vertex_buffer
-                    } else {
-                        &self.cube_vertex_buffer
-                    };
-
-                    let mut right_hand_encoder =
-                        device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                            label: Some("Right Hand Encoder"),
-                        });
-
-                    {
-                        let mut render_pass =
-                            right_hand_encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                                label: Some("Right Hand Render Pass"),
-                                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                                    view: &view_texture_view,
-                                    resolve_target: None,
-                                    ops: wgpu::Operations {
-                                        load: wgpu::LoadOp::Load,
-                                        store: wgpu::StoreOp::Store,
-                                    },
-                                    depth_slice: None,
-                                })],
-                                depth_stencil_attachment: Some(
-                                    wgpu::RenderPassDepthStencilAttachment {
-                                        view: &depth_view,
-                                        depth_ops: Some(wgpu::Operations {
-                                            load: wgpu::LoadOp::Load,
-                                            store: wgpu::StoreOp::Store,
-                                        }),
-                                        stencil_ops: None,
-                                    },
-                                ),
-                                timestamp_writes: None,
-                                occlusion_query_set: None,
-                            });
-
-                        render_pass.set_pipeline(&scene.pipeline);
-                        render_pass.set_bind_group(0, &scene.uniform.bind_group, &[]);
-                        render_pass.set_vertex_buffer(0, right_cube_buffer.slice(..));
-                        render_pass.set_index_buffer(
-                            self.cube_index_buffer.slice(..),
-                            wgpu::IndexFormat::Uint32,
-                        );
-                        render_pass.draw_indexed(0..36, 0, 0..1);
-                    }
-
-                    queue.submit(std::iter::once(right_hand_encoder.finish()));
-                }
-            }
+            queue.submit(std::iter::once(right_hand_encoder.finish()));
         }
 
         self.swapchain.release_image()?;
@@ -1200,6 +1433,7 @@ impl XrContext {
 }
 
 pub fn run_xr() -> Result<(), Box<dyn std::error::Error>> {
+    #[cfg(not(target_os = "android"))]
     env_logger::init();
     log::info!("Initializing OpenXR mode");
 
@@ -1210,9 +1444,21 @@ pub fn run_xr() -> Result<(), Box<dyn std::error::Error>> {
     log::info!("Starting XR render loop");
 
     loop {
-        if !xr_context.poll_events()? {
-            log::info!("XR session ended, exiting");
-            break;
+        match xr_context.poll_events() {
+            Ok(true) => {}
+            Ok(false) => {
+                log::info!("XR session ended, exiting");
+                break;
+            }
+            Err(error) => {
+                log::warn!("XR event polling failed, shutting down: {error}");
+                break;
+            }
+        }
+
+        if !xr_context.is_session_running() {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+            continue;
         }
 
         let now = Instant::now();
@@ -1225,11 +1471,36 @@ pub fn run_xr() -> Result<(), Box<dyn std::error::Error>> {
             &nalgebra_glm::Vec3::y(),
         );
 
-        let frame_state = xr_context.wait_frame()?;
-        xr_context.update_movement(delta_time, frame_state.predicted_display_time)?;
+        let frame_state = match xr_context.wait_frame() {
+            Ok(frame_state) => frame_state,
+            Err(error) => {
+                log::warn!("xrWaitFrame failed, shutting down: {error}");
+                break;
+            }
+        };
 
-        xr_context.render_frame(&device, &queue, &mut scene, delta_time, frame_state)?;
+        if let Err(error) =
+            xr_context.update_movement(delta_time, frame_state.predicted_display_time)
+        {
+            log::warn!("Action sync failed, shutting down: {error}");
+            break;
+        }
+
+        if let Err(error) =
+            xr_context.render_frame(&device, &queue, &mut scene, delta_time, frame_state)
+        {
+            log::warn!("Frame rendering failed, shutting down: {error}");
+            break;
+        }
     }
+
+    log::info!("Draining GPU work before teardown");
+    let _ = device.poll(wgpu::PollType::Wait {
+        submission_index: None,
+        timeout: None,
+    });
+    xr_context.shutdown();
+    drop(xr_context);
 
     Ok(())
 }

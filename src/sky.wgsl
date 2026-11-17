@@ -1,8 +1,6 @@
 struct Uniform {
-    proj: mat4x4<f32>,
-    proj_inv: mat4x4<f32>,
-    view: mat4x4<f32>,
-    cam_pos: vec4<f32>,
+    proj_inv: array<mat4x4<f32>, 2>,
+    view: array<mat4x4<f32>, 2>,
 };
 
 @group(0) @binding(0)
@@ -14,7 +12,7 @@ struct VertexOutput {
 };
 
 @vertex
-fn vs_sky(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
+fn vs_sky(@builtin(vertex_index) vertex_index: u32, @builtin(view_index) view: u32) -> VertexOutput {
     let tmp1 = i32(vertex_index) / 2;
     let tmp2 = i32(vertex_index) & 1;
     let pos = vec4<f32>(
@@ -23,8 +21,9 @@ fn vs_sky(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
         1.0,
         1.0
     );
-    let inv_model_view = transpose(mat3x3<f32>(u.view[0].xyz, u.view[1].xyz, u.view[2].xyz));
-    let unprojected = u.proj_inv * pos;
+    let view_matrix = u.view[view];
+    let inv_model_view = transpose(mat3x3<f32>(view_matrix[0].xyz, view_matrix[1].xyz, view_matrix[2].xyz));
+    let unprojected = u.proj_inv[view] * pos;
     var result: VertexOutput;
     result.world_dir = inv_model_view * unprojected.xyz;
     result.position = pos;

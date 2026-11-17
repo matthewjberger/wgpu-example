@@ -45,6 +45,14 @@ run:
 run-openxr:
     cargo run -r --features openxr
 
+# Run the hardware ray tracing demo
+run-rt:
+    cargo run -r --bin rt
+
+# Build the desktop app in OpenXR mode
+build-openxr:
+    cargo build -r --features openxr
+
 # Build the app with wgpu + WebGL
 build-webgl:
     trunk build --features webgl
@@ -172,54 +180,78 @@ init-android:
     rustup target add armv7-linux-androideabi
     rustup target add i686-linux-android
     rustup target add x86_64-linux-android
-    cargo install --locked xbuild
+    cargo install --git https://github.com/rust-mobile/xbuild --bin x --locked
 
-# Connect to Android device via wireless ADB (provide IP and port)
-connect-android ip port="5555":
-    adb connect {{ip}}:{{port}}
+# Pair with Android device for wireless debugging (provide IP:port from pairing screen)
+pair-android address:
+    adb pair {{address}}
+
+# Connect to Android device via wireless ADB (provide IP:port)
+connect-android address:
+    adb connect {{address}}
 
 # List connected Android devices
 list-android:
     adb devices
 
 # Build the app for Android (arm64)
-[unix]
 build-android:
     x build --release --platform android --arch arm64 --features android
-    cp -f target/x/release/android/arm64/cargo/aarch64-linux-android/release/libapp_core.so target/x/release/android/arm64/cargo/aarch64-linux-android/release/libapp.so
-
-[windows]
-build-android:
-    x build --release --platform android --arch arm64 --features android
-    Copy-Item -Force target/x/release/android/arm64/cargo/aarch64-linux-android/release/libapp_core.so target/x/release/android/arm64/cargo/aarch64-linux-android/release/libapp.so
 
 # Build the app for Android (all architectures)
-[unix]
-build-android-all:
+build-android-all: _ensure-libs-x64
     x build --release --platform android --arch arm64 --features android
-    cp -f target/x/release/android/arm64/cargo/aarch64-linux-android/release/libapp_core.so target/x/release/android/arm64/cargo/aarch64-linux-android/release/libapp.so
     x build --release --platform android --arch x64 --features android
-    cp -f target/x/release/android/x64/cargo/x86_64-linux-android/release/libapp_core.so target/x/release/android/x64/cargo/x86_64-linux-android/release/libapp.so
 
-[windows]
-build-android-all:
-    x build --release --platform android --arch arm64 --features android
-    Copy-Item -Force target/x/release/android/arm64/cargo/aarch64-linux-android/release/libapp_core.so target/x/release/android/arm64/cargo/aarch64-linux-android/release/libapp.so
-    x build --release --platform android --arch x64 --features android
-    Copy-Item -Force target/x/release/android/x64/cargo/x86_64-linux-android/release/libapp_core.so target/x/release/android/x64/cargo/x86_64-linux-android/release/libapp.so
+# Build the app for Android with OpenXR (arm64) for Meta Quest
+build-android-openxr:
+    x build --release --platform android --arch arm64 --features android-openxr
 
 # Install the app on connected Android device
 install-android device:
     x build --release --arch arm64 --features android --device adb:{{device}}
-    adb -s {{device}} install -r target/x/release/android/app.apk
+    adb -s {{device}} install -r target/x/release/android/app_core.apk
 
 # Run the app on connected Android device
 run-android device:
     x run --release --arch arm64 --features android --device adb:{{device}}
 
+# Run the app on a connected Android x86_64 device or emulator
+run-android-x64 device: _ensure-libs-x64
+    x run --release --arch x64 --features android --device adb:{{device}}
+
+# Start a local Android emulator with host GPU (avd is the AVD name from `just list-android-emulators`)
+[unix]
+start-android-emulator avd:
+    "${ANDROID_HOME:?ANDROID_HOME is not set; see README emulator setup}/emulator/emulator" -avd {{avd}} -gpu host -no-snapshot
+
+[windows]
+start-android-emulator avd:
+    $h = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } else { [Environment]::GetEnvironmentVariable('ANDROID_HOME','User') }; if (-not $h) { throw 'ANDROID_HOME is not set; see README emulator setup' }; & "$h\emulator\emulator.exe" -avd {{avd}} -gpu host -no-snapshot
+
+# List local Android emulator AVDs
+[unix]
+list-android-emulators:
+    "${ANDROID_HOME:?ANDROID_HOME is not set; see README emulator setup}/emulator/emulator" -list-avds
+
+[windows]
+list-android-emulators:
+    $h = if ($env:ANDROID_HOME) { $env:ANDROID_HOME } else { [Environment]::GetEnvironmentVariable('ANDROID_HOME','User') }; if (-not $h) { throw 'ANDROID_HOME is not set; see README emulator setup' }; & "$h\emulator\emulator.exe" -list-avds
+
+[unix]
+[private]
+_ensure-libs-x64:
+    mkdir -p libs/x86_64
+
+[windows]
+[private]
+_ensure-libs-x64:
+    New-Item -ItemType Directory -Force libs/x86_64 | Out-Null
+
 # Install Steam Deck tooling
 init-steamdeck:
     cargo install --locked cross
+    rustup toolchain install --force-non-host stable-x86_64-unknown-linux-gnu
 
 # Build the app for Steam Deck
 build-steamdeck:

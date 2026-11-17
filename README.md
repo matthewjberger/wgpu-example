@@ -1,86 +1,330 @@
 # Rust / Winit / Egui / Wgpu Triangle
 
-This project demonstrates how to setup a [rust](https://www.rust-lang.org/) project
-that uses [wgpu](https://wgpu.rs/) to render a spinning triangle, supporting
-both webgl and webgpu [wasm](https://webassembly.org/), native desktop, Android, and Steam Deck.
+A cross-platform [Rust](https://www.rust-lang.org/) graphics demo using [wgpu](https://wgpu.rs/) to render a spinning triangle. Supports native desktop, WebGL/WebGPU ([WASM](https://webassembly.org/)), Android, Steam Deck, [OpenXR](https://www.khronos.org/openxr/) VR with hand tracking, [WebXR](https://immersive-web.github.io/webxr/) for browser-based VR, and a real-time [hardware ray tracing](#hardware-ray-tracing) demo (`just run-rt`).
 
-It also includes an [OpenXR](https://www.khronos.org/openxr/) VR mode with hand tracking, procedural skybox, and infinite grid.
-
-> If you're looking for a Vulkan example, check out [the vulkan-example repo](https://github.com/matthewjberger/vulkan-example)
->
-> If you're looking for an OpenGL example, check out [the opengl-example repo](https://github.com/matthewjberger/opengl-example)
->
-> I've also created a game engine called [Nightshade](https://matthewberger.dev/nightshade) based on this boilerplate and my [freecs](https://github.com/matthewjberger/freecs) ECS library
+> **Related Projects:**
+> - [Nightshade](https://github.com/matthewjberger/nightshade) - Game engine based on this boilerplate
+> - [vulkan-example](https://github.com/matthewjberger/vulkan-example) - Vulkan version
+> - [opengl-example](https://github.com/matthewjberger/opengl-example) - OpenGL version
+> - [freecs](https://github.com/matthewjberger/freecs) - ECS library used by Nightshade
 
 <img width="802" height="632" alt="native" src="https://github.com/user-attachments/assets/aaad05db-8a5b-4306-a166-2692b4e365fb" />
 
+Other languages (experimental):
+- [wgpu-example-odin](https://github.com/matthewjberger/wgpu-example-odin)
+- [wgpu-example-c](https://github.com/matthewjberger/wgpu-example-c)
+- [wgpu-example-zig](https://github.com/matthewjberger/wgpu-example-zig)
+- [wgpu-example-go](https://github.com/matthewjberger/wgpu-example-go)
+
+## WebGPU in a Web Worker
+
+Examples of running WebGPU off the main thread, where a web worker owns an `OffscreenCanvas` and drives the render loop while the page only transfers the canvas and forwards events:
+
+- [bevy-worker](https://github.com/matthewjberger/bevy-worker) - a [Bevy](https://bevyengine.org) app rendering in the worker, with a TypeScript frontend.
+- [webgpu-worker](https://github.com/matthewjberger/webgpu-worker) - the same architecture without an engine, rendering with wgpu from scratch, with a TypeScript frontend.
+- [webgpu-worker-leptos](https://github.com/matthewjberger/webgpu-worker-leptos) - wgpu from scratch with a [Leptos](https://leptos.dev) frontend, so the whole stack is in Rust.
+
 ## Quickstart
+
+All platforms are driven through the [`justfile`](./justfile). Run `just` (no args) to list every recipe.
+
+| Platform            | Run                             | Build only                  |
+|---------------------|---------------------------------|-----------------------------|
+| Native Desktop      | `just run`                      | `just build`                |
+| Hardware Ray Tracing| `just run-rt`                   | `cargo build -r --bin rt`   |
+| WebGPU              | `just run-webgpu`               | `just build-webgpu`         |
+| WebGL               | `just run-webgl`                | `just build-webgl`          |
+| WebXR (Browser VR)  | `just run-webxr-tunnel`         | -                           |
+| Android (arm64)     | `just run-android DEVICE_ID`    | `just build-android`        |
+| Android (x86_64)    | `just run-android-x64 DEVICE_ID`| -                           |
+| Android (all archs) | -                               | `just build-android-all`    |
+| Steam Deck          | `just build-steamdeck && just deploy-steamdeck` | `just build-steamdeck` |
+| OpenXR VR (Desktop) | `just run-openxr`               | `just build-openxr`         |
+| OpenXR VR (Quest)   | `just build-android-openxr` + `adb install -r target/x/release/android/app_core.apk` | `just build-android-openxr` |
+
+First-time setup per platform: `just init-wasm`, `just init-android`, `just init-steamdeck`.
+
+## Platform Setup
 
 ### Native Desktop
 
 ```bash
-cargo run -r
+just run           # Release build, runs the `app` binary
+just build         # Release build only
+just run-rt        # Hardware ray tracing demo (see below)
+just run-openxr    # Run with the OpenXR feature (desktop VR, see below)
+just build-openxr  # Build the OpenXR binary without running it
 ```
+
+### Hardware Ray Tracing
+
+<img width="2560" height="1392" alt="hardware ray tracing demo" src="assets/raytracing.png" />
+
+`just run-rt` runs a real-time, hardware-accelerated ray tracer built on wgpu's
+acceleration structures (BLAS + TLAS) and inline ray queries in a compute shader.
+This is genuine GPU ray tracing on the RT cores, not a software tracer. wgpu
+exposes no ray-tracing pipeline or shader binding table, so the whole tracer runs
+as one compute shader driving `ray_query` over the hardware acceleration
+structures. This is the same technique used for inline ray tracing in Vulkan/DirectX.
+
+The scene is an original mixed-geometry composition: a refractive glass cube, a
+standing reflective torus, a tall mirror slab, matte and reflective boxes, and a
+few spheres, sitting on a mirrored checkerboard floor under a spherical area
+light. Rays bounce through several reflective surfaces per pixel, the glass both
+reflects and bends light with a per-wavelength offset that fringes its edges in
+faint rainbow, and the area light throws soft shadows that spread wider the
+farther a caster sits above the floor. Every frame is nudged by a fraction of a
+pixel and blended into a running average, so a still camera keeps sharpening
+toward a clean result and any movement starts it over.
+
+Controls: **left-drag** to orbit, **mouse wheel** to zoom, **Esc** to quit.
+
+Requires `wgpu::Features::EXPERIMENTAL_RAY_QUERY`: a ray-tracing capable GPU with
+current drivers (NVIDIA RTX 20-series or newer, AMD RX 6000-series or newer, or
+Intel Arc). The demo panics with a clear message if the GPU lacks the feature.
 
 ### Web (WebAssembly)
 
-WebGPU:
+**Prerequisites:** [trunk](https://trunkrs.dev/)
+
+**First-time setup:**
 ```bash
-trunk serve --features webgpu --open
+just init-wasm
 ```
 
-WebGL:
+**Serve locally:**
 ```bash
-trunk serve --features webgl --open
+just run-webgpu  # Serves on http://localhost:8080 and opens the browser
+just run-webgl   # WebGL fallback for older browsers
 ```
 
-> All chromium-based browsers like Brave, Vivaldi, Chrome, etc support wgpu.
-> Firefox also [supports wgpu](https://mozillagfx.wordpress.com/2025/07/15/shipping-webgpu-on-windows-in-firefox-141/) now starting with version `141`.
+**Build only** (outputs to `dist/`):
+```bash
+just build-webgpu
+just build-webgl
+```
+
+**Browser Support:** All Chromium-based browsers (Chrome, Brave, Vivaldi) support WebGPU. Firefox supports WebGPU starting with version 141 ([announcement](https://mozillagfx.wordpress.com/2025/07/15/shipping-webgpu-on-windows-in-firefox-141/)).
 
 ### Android
 
+**Prerequisites:**
+- [xbuild](https://github.com/rust-mobile/xbuild)
+- Android SDK and NDK
+- Connected Android device or emulator (API level 24+)
+
+**First-time setup:**
 ```bash
-just run-android DEVICE_ID
+just init-android
 ```
+
+**Build and run:**
+```bash
+just list-android          # Find your device ID
+just run-android DEVICE_ID # e.g., just run-android RFCY61DZZKT
+```
+
+Connect via USB with USB debugging enabled, or use wireless debugging (see below).
+
+The build uses `--features android` which enables wgpu's Vulkan backend.
+
+<details>
+<summary><strong>Wireless Debugging Setup</strong></summary>
+
+1. Enable Developer options: **Settings > About phone > tap Build number 7 times**
+2. Disable auto-blocker if present (Samsung): **Settings > Security > Auto Blocker**
+3. Enable wireless debugging: **Settings > Developer options > Wireless debugging**
+4. Tap **Pair device with pairing code** and note the IP:port
+5. Pair and connect:
+   ```bash
+   just pair-android 192.168.1.100:37000  # Enter pairing code when prompted
+   just list-android                       # Get device ID
+   just run-android DEVICE_ID
+   ```
+</details>
+
+<details>
+<summary><strong>Additional Android Commands</strong></summary>
+
+```bash
+just build-android              # Build only (windowed app)
+just build-android-all          # Build for arm64 and x64
+just build-android-openxr       # Build for Meta Quest VR
+just install-android DEVICE_ID  # Install without running
+just connect-android IP:PORT    # Connect over wireless ADB
+just list-android               # List connected devices
+just run-android-x64 DEVICE_ID  # Run x86_64 build (for emulators / x64 devices)
+just start-android-emulator AVD # Launch a local Google AVD with host GPU
+just list-android-emulators     # List local AVDs
+```
+</details>
+
+<details>
+<summary><strong>Local Emulator Setup (Google Android Emulator)</strong></summary>
+
+For local testing without a physical device. Use Google's emulator with
+`-gpu host`, which routes graphics through the host GPU via gfxstream; wgpu's
+Vulkan/GLES path works there. **Third-party emulators like MuMu and BlueStacks
+do not work**: their legacy `libEGL_emulation.so` driver leaves the
+`ANativeWindow` bound after wgpu's Vulkan adapter probe, so the GLES surface
+fails with `EGL_BAD_ALLOC` → `Surface::configure: Invalid surface`.
+
+> **Apple Silicon Macs:** the snippets below use `x86_64` system images and `just run-android-x64`. On ARM Macs, swap `x86_64` for `arm64-v8a` everywhere (system-image package, the `avdmanager create avd -k` argument), and run the app with the existing `just run-android` recipe (arm64) instead of `run-android-x64`. HVF can't accelerate x86_64 guests on ARM hosts, so the x64 path falls back to a software rasterizer and won't hit your GPU.
+
+**1. Install the Android SDK + emulator.** Easiest path is [Android Studio](https://developer.android.com/studio) - run it once and walk through the setup wizard, which installs `platform-tools`, `emulator`, a system image, and creates a default AVD.
+
+If you'd rather stay on the command line, install the cmdline-tools and use `sdkmanager`:
+
+| OS      | Install                                                                                                                            |
+|---------|------------------------------------------------------------------------------------------------------------------------------------|
+| Windows | [scoop](https://scoop.sh): `scoop install java/openjdk17 main/android-clt`                                                         |
+| macOS   | [Homebrew](https://brew.sh): `brew install --cask android-commandlinetools temurin@17`                                             |
+| Linux   | Download [cmdline-tools](https://developer.android.com/studio#command-line-tools-only) and a JDK 17 (`apt install openjdk-17-jdk`) |
+
+Then accept licenses and install components (set `ANDROID_HOME` to your SDK root first):
+
+```bash
+sdkmanager --licenses    # On Windows PowerShell, see note below
+sdkmanager --install "platform-tools" "emulator" "platforms;android-34" "system-images;android-34;google_apis;x86_64"
+```
+
+`just start-android-emulator` uses `$ANDROID_HOME` directly, so it works without `PATH` setup as long as `ANDROID_HOME` is set. scoop sets it persistently during `android-clt` install; the brew cask only prints a caveats block (you'll need to `export ANDROID_HOME=/opt/homebrew/share/android-commandlinetools` or similar in your shell rc); on a manual Linux install you set it yourself. If you also want to run `emulator`, `adb`, or `avdmanager` directly from your shell, add the relevant subdirs to `PATH`:
+
+```powershell
+# Windows (one-time, persists in user PATH; restart shell to pick up)
+$dirs = "$env:ANDROID_HOME\emulator", "$env:ANDROID_HOME\platform-tools", "$env:ANDROID_HOME\cmdline-tools\latest\bin"
+[Environment]::SetEnvironmentVariable("Path", [Environment]::GetEnvironmentVariable("Path","User") + ";" + ($dirs -join ";"), "User")
+```
+
+```bash
+# macOS / Linux (add to ~/.zshrc or ~/.bashrc)
+export PATH="$ANDROID_HOME/emulator:$ANDROID_HOME/platform-tools:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
+```
+
+> **Windows PowerShell note:** stdin piping to `sdkmanager --licenses` is unreliable. Either run it from `cmd.exe` (`yes | sdkmanager --licenses`), or write the license accept files directly, see the snippet at the bottom of this section.
+
+**2. Verify hardware acceleration.**
+
+```bash
+emulator -accel-check
+```
+
+Expect `WHPX/HVF/KVM is installed and usable`. On Windows 11, WHPX is on by default; if not, run `Enable-WindowsOptionalFeature -Online -FeatureName HypervisorPlatform -All` from an admin shell and reboot. macOS uses HVF with no setup. On Linux, install `qemu-kvm` and add yourself to the `kvm` group (`sudo usermod -aG kvm $USER`, then log out/in).
+
+**3. Create an AVD** (skip if Studio's wizard already made one; `just list-android-emulators` shows existing):
+
+```bash
+echo no | avdmanager create avd -n wgpu_test -k "system-images;android-34;google_apis;x86_64" -d "pixel_6"
+```
+
+**4. Launch the emulator and run the app:**
+
+```bash
+just start-android-emulator wgpu_test    # in one shell
+just run-android-x64 emulator-5554       # in another
+```
+
+`just run-android-x64` requires xbuild from git master - `cargo install xbuild` from crates.io ships v0.2.0 which has a [linker bug](https://github.com/rust-mobile/xbuild/issues/164) for `--arch x64` (passes `--target=aarch64-linux-android` to clang while linking x86_64 objects). `just init-android` already pulls from master.
+
+The recipe also creates `libs/x86_64/` on demand. xbuild's `runtime_libs` scan in `manifest.yaml` requires the per-ABI directory to exist for any ABI you build, even though the repo only ships `libs/arm64-v8a/libopenxr_loader.so` for Quest.
+
+<details>
+<summary>Windows PowerShell license workaround</summary>
+
+```powershell
+$licDir = Join-Path $env:ANDROID_HOME "licenses"
+New-Item -Path $licDir -ItemType Directory -Force | Out-Null
+@{
+  "android-sdk-license"           = "24333f8a63b6825ea9c5514f83c2829b004d1fee`nd56f5187479451eabf01fb78af6dfcb131a6481e`n8933bad161af4178b1185d1a37fbf41ea5269c55"
+  "android-sdk-preview-license"   = "84831b9409646a918e30573bab4c9c91346d8abd"
+  "android-googletv-license"      = "601085b94cd77f0b54ff86406957099ebe79c4d6"
+  "google-gdk-license"            = "33b6a2b64607f11b759f320ef9dff4ae5c47d97a"
+  "mips-android-sysimage-license" = "e9acab5b5fbb560a72cfaecce8946896ff6aab9d"
+  "android-sdk-arm-dbt-license"   = "859f317696f67ef3d7f30a50a5560e7834b43903"
+  "intel-android-extra-license"   = "d975f751698a77b662f1254ddbeed3901e976f5a"
+}.GetEnumerator() | ForEach-Object {
+  Set-Content -Path (Join-Path $licDir $_.Key) -Value $_.Value -NoNewline -Encoding ASCII
+}
+```
+</details>
+</details>
 
 ### Steam Deck
 
+**Prerequisites:**
+- [cross](https://github.com/cross-rs/cross)
+- Docker Desktop running (for cross-compilation)
+
+**First-time setup:**
 ```bash
-just build-steamdeck
-just deploy-steamdeck
+just init-steamdeck
 ```
 
-### OpenXR VR Mode (Desktop Native)
+This installs `cross` and a Linux stable toolchain (`stable-x86_64-unknown-linux-gnu`). The Linux toolchain won't run natively on Windows/macOS, but `cross` mounts your `~/.rustup` into its Linux container so it gets used there - overriding the older rustc baked into cross 0.2.5's image so modern crates (egui, wgpu) can build.
 
+**Build and deploy:**
 ```bash
-just run-openxr
+just build-steamdeck   # Cross-compiles to target/x86_64-unknown-linux-gnu/release/app
+just deploy-steamdeck  # Transfers to steamdeck.local:~/Downloads
 ```
 
-### WebXR VR Mode (Browser-based)
-
+**Run on Steam Deck:**
 ```bash
-just run-webxr-tunnel
+just steamdeck-ssh
+cd ~/Downloads && ./app
 ```
 
-For detailed WebXR setup instructions, see [WEBXR.md](WEBXR.md).
+The `Cross.toml` file configures system libraries for graphics and windowing support.
 
-## OpenXR VR Mode
+### OpenXR VR Mode (Desktop)
 
-The OpenXR VR mode renders a spinning triangle, infinite grid, and procedural skybox in virtual reality with hand tracking.
+Renders the spinning triangle with an infinite grid, procedural skybox, and hand tracking in VR via PCVR streaming.
 
-### Setup
-
+**Setup:**
 1. Install [SteamVR](https://store.steampowered.com/app/250820/SteamVR/)
-2. Install [Virtual Desktop](https://www.vrdesktop.net/) (or another OpenXR-compatible VR runtime)
+2. Install [Virtual Desktop](https://www.vrdesktop.net/) or another OpenXR-compatible runtime
 3. Start Virtual Desktop and stream your desktop to your VR headset
-4. On your desktop, run `just run-openxr`
-5. The application will appear in VR
+4. Run `just run-openxr` on your desktop
 
-## WebXR VR Mode
+### OpenXR VR Mode (Meta Quest)
+
+Native standalone VR for Meta Quest 2, Quest Pro, Quest 3, and Quest 3S.
+
+**Prerequisites:**
+- All Android prerequisites (see above)
+- Meta Quest device with Developer Mode enabled
+
+**Build:**
+```bash
+just build-android-openxr
+```
+
+This produces an APK at `target/x/release/android/app_core.apk`.
+
+**Install on Quest:**
+```bash
+adb install -r target/x/release/android/app_core.apk
+```
+
+Or use [SideQuest](https://sidequestvr.com) to drag and drop the APK onto your Quest.
+
+The app appears in your Quest library under "Unknown Sources".
+
+<details>
+<summary><strong>Technical Notes</strong></summary>
+
+- Uses the `android-openxr` feature which combines `android` and `openxr` features
+- Bundles Meta's OpenXR loader from `libs/arm64-v8a/libopenxr_loader.so`
+- Manifest includes `com.oculus.intent.category.VR` for proper VR app handling
+- Supports Quest hand tracking and controller input
+- Requires `manifest.yaml` with `runtime_libs` configuration for library bundling
+</details>
+
+### WebXR VR Mode (Browser)
 
 WebXR enables VR experiences directly in the browser without installing native apps. This works on Meta Quest, Pico, and other standalone VR headsets.
 
-### Quick Start (Easiest Method)
+**Quick start:**
 
 1. Install cloudflared (one-time):
    ```bash
@@ -93,9 +337,7 @@ WebXR enables VR experiences directly in the browser without installing native a
    ```
 
 3. Open the displayed HTTPS URL in your VR headset's browser
-4. Click "Enter VR" button
-
-### Alternative Methods
+4. Click the "Enter VR" button
 
 See [WEBXR.md](WEBXR.md) for:
 - Local HTTPS setup with mkcert
@@ -103,130 +345,17 @@ See [WEBXR.md](WEBXR.md) for:
 - Meta Quest developer mode
 - Troubleshooting guide
 
-### Available Commands
+<details>
+<summary><strong>Additional WebXR Commands</strong></summary>
 
 ```bash
-# Local development (localhost only)
-just run-webxr
-
-# Easiest for headset access (automatic HTTPS tunnel)
-just run-webxr-tunnel
-
-# Network access without HTTPS (won't work for WebXR)
-just run-webxr-network
-
-# HTTPS with custom certificates
-just run-webxr-https cert.pem key.pem
-
-# Show your local IP address
-just webxr-ip
+just run-webxr                        # Local development (localhost only)
+just run-webxr-tunnel                 # Easiest for headset access (automatic HTTPS tunnel)
+just run-webxr-network                # Network access without HTTPS (won't work for WebXR)
+just run-webxr-https cert.pem key.pem # HTTPS with custom certificates
+just webxr-ip                         # Show your local IP address
 ```
-
-## Prerequisites (web)
-
-* [trunk](https://trunkrs.dev/)
-
-## Prerequisites (android)
-
-* [xbuild](https://github.com/rust-mobile/xbuild)
-* Android SDK and NDK
-* A connected Android device or emulator
-
-### Android Build Instructions
-
-1. Install Android tooling (first time only):
-   ```bash
-   just init-android
-   ```
-   This installs the Android Rust toolchains and xbuild.
-
-2. Connect your Android device via USB and enable USB debugging, or start an Android emulator.
-
-3. Find your device ID:
-   ```bash
-   just list-android
-   ```
-   This will show connected devices like:
-   ```
-   List of devices attached
-   RFCY61DZZKT     device
-   ```
-
-4. Build and run on your device (replace `DEVICE_ID` with your device from step 3):
-   ```bash
-   just run-android DEVICE_ID
-   ```
-   Example: `just run-android RFCY61DZZKT`
-
-### Additional Android Commands
-
-```bash
-# Build only (without running)
-just build-android
-
-# Build for all architectures (arm64 and x64)
-just build-android-all
-
-# Install without running
-just install-android DEVICE_ID
-
-# Connect to device over wireless ADB
-just connect-android 192.168.1.100
-
-# List all connected devices
-just list-android
-```
-
-The Android build uses the `--features android` flag which enables wgpu's Vulkan backend. Requires Android API level 24 or higher.
-
-## Prerequisites (Steam Deck)
-
-* [cross](https://github.com/cross-rs/cross)
-* Docker (for cross-compilation)
-
-### Steam Deck Build Instructions
-
-1. Ensure Docker is installed and running (required for cross-compilation).
-
-2. Install Steam Deck tooling (first time only):
-   ```bash
-   just init-steamdeck
-   ```
-   This installs the cross tool.
-
-3. Build for Steam Deck:
-   ```bash
-   just build-steamdeck
-   ```
-   This cross-compiles the binary to `target/x86_64-unknown-linux-gnu/release/app`.
-
-4. Deploy to Steam Deck:
-   ```bash
-   just deploy-steamdeck
-   ```
-   This transfers the binary to your Steam Deck at `steamdeck.local` into `~/Downloads`.
-
-5. Run on Steam Deck:
-   ```bash
-   just steamdeck-ssh
-   cd ~/Downloads
-   ./app
-   ```
-
-### Additional Steam Deck Commands
-
-```bash
-# SSH into Steam Deck
-just steamdeck-ssh
-
-# Build only (without deploying)
-just build-steamdeck
-
-# Deploy only (assumes already built)
-just deploy-steamdeck
-```
-
-The Steam Deck build uses cross-compilation via Docker containers to ensure compatibility with the Steam Deck's Linux environment. The `Cross.toml` file configures the necessary system libraries for graphics and windowing support.
+</details>
 
 ## Screenshots
 

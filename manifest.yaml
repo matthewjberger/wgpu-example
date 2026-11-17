@@ -1,0 +1,30 @@
+android:
+  runtime_libs:
+    - libs
+  manifest:
+    package: com.example.wgpu_android_xr
+    sdk:
+      min_sdk_version: 24
+      target_sdk_version: 33
+    uses_feature:
+      - name: android.hardware.vulkan.level
+        required: true
+        version: 1
+    application:
+      meta_data:
+        - name: com.oculus.supportedDevices
+          value: quest2|questpro|quest3|quest3s
+      activities:
+        - name: android.app.NativeActivity
+          exported: true
+          orientation: user
+          config_changes: "orientation|keyboardHidden|screenSize|screenLayout|smallestScreenSize|uiMode|density"
+          meta_data:
+            - name: android.app.lib_name
+              value: app_core
+          intent_filters:
+            - actions:
+                - android.intent.action.MAIN
+              categories:
+                - android.intent.category.LAUNCHER
+                - com.oculus.intent.category.VR

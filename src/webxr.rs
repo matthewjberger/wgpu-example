@@ -60,9 +60,9 @@ impl WebXrContext {
         gl_context: web_sys::WebGl2RenderingContext,
     ) -> Result<Self, JsValue> {
         log::info!("Creating wgpu instance with GL backend...");
-        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
+        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::GL,
-            ..Default::default()
+            ..wgpu::InstanceDescriptor::new_without_display_handle()
         });
 
         log::info!("Requesting wgpu adapter...");
@@ -71,6 +71,7 @@ impl WebXrContext {
                 power_preference: wgpu::PowerPreference::HighPerformance,
                 compatible_surface: None,
                 force_fallback_adapter: false,
+                apply_limit_buckets: false,
             })
             .await
             .map_err(|e| {
@@ -158,12 +159,12 @@ impl WebXrContext {
             label: Some("Grid Bind Group"),
         });
 
-        let grid_shader = device.create_shader_module(wgpu::include_wgsl!("grid.wgsl"));
+        let grid_shader = device.create_shader_module(wgpu::include_wgsl!("webxr_grid.wgsl"));
 
         let grid_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Grid Pipeline Layout"),
-            bind_group_layouts: &[&grid_bind_group_layout],
-            push_constant_ranges: &[],
+            bind_group_layouts: &[Some(&grid_bind_group_layout)],
+            immediate_size: 0,
         });
 
         let grid_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -203,8 +204,8 @@ impl WebXrContext {
             },
             depth_stencil: Some(wgpu::DepthStencilState {
                 format: wgpu::TextureFormat::Depth32Float,
-                depth_write_enabled: false,
-                depth_compare: wgpu::CompareFunction::LessEqual,
+                depth_write_enabled: Some(false),
+                depth_compare: Some(wgpu::CompareFunction::LessEqual),
                 stencil: wgpu::StencilState::default(),
                 bias: wgpu::DepthBiasState {
                     constant: 2,
@@ -213,7 +214,7 @@ impl WebXrContext {
                 },
             }),
             multisample: wgpu::MultisampleState::default(),
-            multiview: None,
+            multiview_mask: None,
             cache: None,
         });
 
@@ -248,12 +249,12 @@ impl WebXrContext {
             label: Some("Sky Bind Group"),
         });
 
-        let sky_shader = device.create_shader_module(wgpu::include_wgsl!("sky.wgsl"));
+        let sky_shader = device.create_shader_module(wgpu::include_wgsl!("webxr_sky.wgsl"));
 
         let sky_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Sky Pipeline Layout"),
-            bind_group_layouts: &[&sky_bind_group_layout],
-            push_constant_ranges: &[],
+            bind_group_layouts: &[Some(&sky_bind_group_layout)],
+            immediate_size: 0,
         });
 
         let sky_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -283,7 +284,7 @@ impl WebXrContext {
             },
             depth_stencil: None,
             multisample: wgpu::MultisampleState::default(),
-            multiview: None,
+            multiview_mask: None,
             cache: None,
         });
 
@@ -353,9 +354,7 @@ impl WebXrContext {
         let proj_array = view.projection_matrix();
         let mut values = [0.0f32; 16];
 
-        for index in 0..16_usize {
-            values[index] = proj_array[index];
-        }
+        values.copy_from_slice(&proj_array[..16]);
 
         nalgebra_glm::Mat4::from_column_slice(&values)
     }
@@ -394,8 +393,8 @@ impl WebXrContext {
     ) -> Result<(), JsValue> {
         let width = viewport.width() as u32;
         let height = viewport.height() as u32;
-        let viewport_x = viewport.x() as i32;
-        let viewport_y = viewport.y() as i32;
+        let viewport_x = viewport.x();
+        let viewport_y = viewport.y();
 
         let framebuffer = self.gl_layer.framebuffer();
         if framebuffer.is_none() {
@@ -411,7 +410,7 @@ impl WebXrContext {
         let needs_new_render_texture = self
             .cached_render_texture
             .as_ref()
-            .map_or(true, |(w, h, _)| *w != width || *h != height);
+            .is_none_or(|(w, h, _)| *w != width || *h != height);
 
         if needs_new_render_texture {
             let new_texture = self.device.create_texture(&wgpu::TextureDescriptor {
@@ -441,7 +440,7 @@ impl WebXrContext {
         let needs_new_depth_texture = self
             .cached_depth_texture
             .as_ref()
-            .map_or(true, |(w, h, _)| *w != width || *h != height);
+            .is_none_or(|(w, h, _)| *w != width || *h != height);
 
         if needs_new_depth_texture {
             let new_texture = self.device.create_texture(&wgpu::TextureDescriptor {
@@ -503,6 +502,7 @@ impl WebXrContext {
                 depth_stencil_attachment: None,
                 timestamp_writes: None,
                 occlusion_query_set: None,
+                multiview_mask: None,
             });
 
             render_pass.set_pipeline(&self.sky_pipeline);
@@ -549,6 +549,7 @@ impl WebXrContext {
                 }),
                 timestamp_writes: None,
                 occlusion_query_set: None,
+                multiview_mask: None,
             });
 
             self.scene.render(&mut render_pass);
@@ -600,6 +601,7 @@ impl WebXrContext {
                 }),
                 timestamp_writes: None,
                 occlusion_query_set: None,
+                multiview_mask: None,
             });
 
             render_pass.set_pipeline(&self.grid_pipeline);
@@ -646,7 +648,7 @@ impl WebXrContext {
                     .ok_or_else(|| JsValue::from_str("Failed to get HAL texture"))?
             };
 
-            let gl_texture = match &(*hal_texture).inner {
+            let gl_texture = match &hal_texture.inner {
                 wgpu_hal::gles::TextureInner::Texture { raw, .. } => raw,
                 wgpu_hal::gles::TextureInner::Renderbuffer { .. } => {
                     return Err(JsValue::from_str("Cannot blit from renderbuffer"));
@@ -753,6 +755,7 @@ impl WebXrContext {
                 }),
                 timestamp_writes: None,
                 occlusion_query_set: None,
+                multiview_mask: None,
             });
 
             render_pass.set_pipeline(&self.scene.pipeline);
@@ -773,26 +776,26 @@ impl WebXrContext {
             if let Some(input_source_js) = input_sources.get(index) {
                 let input_source: web_sys::XrInputSource = input_source_js.dyn_into()?;
 
-                if let Some(grip_space) = input_source.grip_space() {
-                    if let Some(pose) = frame.get_pose(&grip_space, &self.reference_space) {
-                        let transform = pose.transform();
-                        let position = transform.position();
+                if let Some(grip_space) = input_source.grip_space()
+                    && let Some(pose) = frame.get_pose(&grip_space, &self.reference_space)
+                {
+                    let transform = pose.transform();
+                    let position = transform.position();
 
-                        let controller_pos = nalgebra_glm::vec3(
-                            position.x() as f32,
-                            position.y() as f32,
-                            position.z() as f32,
-                        );
+                    let controller_pos = nalgebra_glm::vec3(
+                        position.x() as f32,
+                        position.y() as f32,
+                        position.z() as f32,
+                    );
 
-                        match input_source.handedness() {
-                            web_sys::XrHandedness::Left => {
-                                self.left_controller_position = Some(controller_pos);
-                            }
-                            web_sys::XrHandedness::Right => {
-                                self.right_controller_position = Some(controller_pos);
-                            }
-                            _ => {}
+                    match input_source.handedness() {
+                        web_sys::XrHandedness::Left => {
+                            self.left_controller_position = Some(controller_pos);
                         }
+                        web_sys::XrHandedness::Right => {
+                            self.right_controller_position = Some(controller_pos);
+                        }
+                        _ => {}
                     }
                 }
 
@@ -823,6 +826,8 @@ impl WebXrContext {
         Ok(())
     }
 }
+
+type AnimationFrameClosure = Closure<dyn FnMut(f64, web_sys::XrFrame)>;
 
 pub async fn init_webxr() -> Result<(), JsValue> {
     console_error_panic_hook::set_once();
@@ -954,7 +959,7 @@ pub async fn init_webxr() -> Result<(), JsValue> {
     ));
     log::info!("WebXR context created successfully");
 
-    let animation_frame_closure: Rc<RefCell<Option<Closure<dyn FnMut(f64, web_sys::XrFrame)>>>> =
+    let animation_frame_closure: Rc<RefCell<Option<AnimationFrameClosure>>> =
         Rc::new(RefCell::new(None));
     let animation_frame_closure_clone = animation_frame_closure.clone();
 
@@ -964,11 +969,11 @@ pub async fn init_webxr() -> Result<(), JsValue> {
 
     *animation_frame_closure.borrow_mut() =
         Some(Closure::new(move |_time: f64, frame: web_sys::XrFrame| {
-            if let Ok(mut ctx) = context_clone.try_borrow_mut() {
-                if let Err(e) = ctx.render_frame(&frame) {
-                    log::error!("Render frame error: {:?}", e);
-                    return;
-                }
+            if let Ok(mut ctx) = context_clone.try_borrow_mut()
+                && let Err(e) = ctx.render_frame(&frame)
+            {
+                log::error!("Render frame error: {:?}", e);
+                return;
             }
 
             if let Some(closure) = animation_frame_closure_clone.borrow().as_ref() {
