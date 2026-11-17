@@ -18,6 +18,12 @@ pub mod webxr;
 #[cfg(all(target_arch = "wasm32", feature = "webxr"))]
 pub use webxr::initialize_webxr;
 
+#[cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))]
+pub mod raytracing;
+
+#[cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))]
+pub use raytracing::run_raytracing;
+
 use std::sync::Arc;
 use web_time::{Duration, Instant};
 use winit::{
@@ -83,10 +89,20 @@ pub struct App {
     #[cfg(target_arch = "wasm32")]
     renderer_receiver: Option<futures::channel::oneshot::Receiver<Renderer>>,
     last_size: (u32, u32),
+    initialized: bool,
 }
 
 impl ApplicationHandler for App {
+    fn suspended(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop) {
+        self.renderer = None;
+        self.window = None;
+    }
+
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
+        if self.window.is_some() {
+            return;
+        }
+
         let mut attributes = Window::default_attributes();
 
         #[cfg(not(target_arch = "wasm32"))]
@@ -119,12 +135,9 @@ impl ApplicationHandler for App {
             return;
         };
 
-        let first_window_handle = self.window.is_none();
         let window_handle = Arc::new(window);
         self.window = Some(window_handle.clone());
-        if !first_window_handle {
-            return;
-        }
+
         let gui_context = egui::Context::default();
 
         #[cfg(not(target_arch = "wasm32"))]
@@ -134,11 +147,6 @@ impl ApplicationHandler for App {
         }
 
         #[cfg(target_arch = "wasm32")]
-        {
-            gui_context.set_pixels_per_point(1.0);
-        }
-
-        #[cfg(target_os = "android")]
         {
             gui_context.set_pixels_per_point(1.0);
         }
@@ -161,7 +169,9 @@ impl ApplicationHandler for App {
 
         #[cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))]
         {
-            env_logger::init();
+            if !self.initialized {
+                env_logger::init();
+            }
             let renderer = pollster::block_on(async move {
                 Renderer::new(window_handle.clone(), width, height).await
             });
@@ -180,8 +190,10 @@ impl ApplicationHandler for App {
         {
             let (sender, receiver) = futures::channel::oneshot::channel();
             self.renderer_receiver = Some(receiver);
-            std::panic::set_hook(Box::new(console_error_panic_hook::hook));
-            console_log::init().expect("Failed to initialize logger!");
+            if !self.initialized {
+                std::panic::set_hook(Box::new(console_error_panic_hook::hook));
+                console_log::init().expect("Failed to initialize logger!");
+            }
             log::info!("Canvas dimensions: ({canvas_width} x {canvas_height})");
             wasm_bindgen_futures::spawn_local(async move {
                 let renderer =
@@ -199,6 +211,7 @@ impl ApplicationHandler for App {
 
         self.gui_state = Some(gui_state);
         self.last_render_time = Some(Instant::now());
+        self.initialized = true;
     }
 
     fn window_event(
@@ -251,12 +264,7 @@ impl ApplicationHandler for App {
                 }
             }
             WindowEvent::ScaleFactorChanged { .. } => {
-                #[cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))]
-                {
-                    let scale_factor = window.scale_factor() as f32;
-                    gui_state.egui_ctx().set_pixels_per_point(scale_factor);
-                }
-                #[cfg(any(target_arch = "wasm32", target_os = "android"))]
+                #[cfg(target_arch = "wasm32")]
                 {
                     gui_state.egui_ctx().set_pixels_per_point(1.0);
                 }
@@ -270,12 +278,7 @@ impl ApplicationHandler for App {
                 renderer.resize(width, height);
                 self.last_size = (width, height);
 
-                #[cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))]
-                {
-                    let scale_factor = window.scale_factor() as f32;
-                    gui_state.egui_ctx().set_pixels_per_point(scale_factor);
-                }
-                #[cfg(any(target_arch = "wasm32", target_os = "android"))]
+                #[cfg(target_arch = "wasm32")]
                 {
                     gui_state.egui_ctx().set_pixels_per_point(1.0);
                 }
@@ -333,9 +336,13 @@ impl ApplicationHandler for App {
                         Some(egui::Rect::from_min_size(egui::Pos2::ZERO, canvas_size));
                 }
 
-                gui_state.egui_ctx().begin_pass(gui_input);
-
-                #[cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))]
+                #[cfg(all(
+                    not(target_arch = "wasm32"),
+                    not(target_os = "android"),
+                    not(feature = "webgpu"),
+                    not(feature = "webgl"),
+                    not(feature = "android")
+                ))]
                 let title = "Rust/Wgpu";
 
                 #[cfg(feature = "webgpu")]
@@ -347,8 +354,14 @@ impl ApplicationHandler for App {
                 #[cfg(feature = "android")]
                 let title = "Rust/Wgpu/Android";
 
-                {
-                    egui::TopBottomPanel::top("top").show(gui_state.egui_ctx(), |ui| {
+                let egui_winit::egui::FullOutput {
+                    textures_delta,
+                    shapes,
+                    pixels_per_point,
+                    platform_output,
+                    ..
+                } = gui_state.egui_ctx().run_ui(gui_input, |ui| {
+                    egui::Panel::top("top").show(ui, |ui| {
                         ui.horizontal(|ui| {
                             egui::MenuBar::new().ui(ui, |ui| {
                                 ui.menu_button("File", |ui| {
@@ -392,26 +405,18 @@ impl ApplicationHandler for App {
                         });
                     });
 
-                    egui::SidePanel::left("left").show(gui_state.egui_ctx(), |ui| {
+                    egui::Panel::left("left").show(ui, |ui| {
                         ui.heading("Scene Tree");
                     });
 
-                    egui::SidePanel::right("right").show(gui_state.egui_ctx(), |ui| {
+                    egui::Panel::right("right").show(ui, |ui| {
                         ui.heading("Inspector");
                     });
 
-                    egui::TopBottomPanel::bottom("Console").show(gui_state.egui_ctx(), |ui| {
+                    egui::Panel::bottom("Console").show(ui, |ui| {
                         ui.heading("Console");
                     });
-                }
-
-                let egui_winit::egui::FullOutput {
-                    textures_delta,
-                    shapes,
-                    pixels_per_point,
-                    platform_output,
-                    ..
-                } = gui_state.egui_ctx().end_pass();
+                });
 
                 gui_state.handle_platform_output(window, platform_output);
 
@@ -492,9 +497,15 @@ impl Renderer {
         self.scene
             .update(&self.gpu.queue, self.gpu.aspect_ratio(), delta_time);
 
-        for (id, image_delta) in &textures_delta.set {
-            self.egui_renderer
-                .update_texture(&self.gpu.device, &self.gpu.queue, *id, image_delta);
+        for (id, image_deltas) in &textures_delta.set {
+            for image_delta in image_deltas {
+                self.egui_renderer.update_texture(
+                    &self.gpu.device,
+                    &self.gpu.queue,
+                    *id,
+                    image_delta,
+                );
+            }
         }
 
         for id in &textures_delta.free {
@@ -517,17 +528,22 @@ impl Renderer {
         );
 
         let surface_texture = match self.gpu.surface.get_current_texture() {
-            Ok(texture) => texture,
-            Err(wgpu::SurfaceError::Outdated) => {
+            wgpu::CurrentSurfaceTexture::Success(frame)
+            | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => frame,
+            wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost => {
                 self.gpu
                     .surface
                     .configure(&self.gpu.device, &self.gpu.surface_config);
-                self.gpu
-                    .surface
-                    .get_current_texture()
-                    .expect("Failed to get surface texture after reconfiguration!")
+                match self.gpu.surface.get_current_texture() {
+                    wgpu::CurrentSurfaceTexture::Success(frame)
+                    | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => frame,
+                    _ => return,
+                }
             }
-            Err(error) => panic!("Failed to get surface texture: {:?}", error),
+            wgpu::CurrentSurfaceTexture::Occluded | wgpu::CurrentSurfaceTexture::Timeout => {
+                return;
+            }
+            other => panic!("Failed to get surface texture: {other:?}"),
         };
 
         let surface_texture_view =
@@ -574,6 +590,7 @@ impl Renderer {
                 }),
                 timestamp_writes: None,
                 occlusion_query_set: None,
+                multiview_mask: None,
             });
             self.scene.render(&mut render_pass);
 
@@ -585,7 +602,7 @@ impl Renderer {
         }
 
         self.gpu.queue.submit(std::iter::once(encoder.finish()));
-        surface_texture.present();
+        self.gpu.queue.present(surface_texture);
     }
 }
 
@@ -644,7 +661,8 @@ impl Gpu {
         width: u32,
         height: u32,
     ) -> Self {
-        let instance = wgpu::Instance::new(&InstanceDescriptor::default());
+        let instance =
+            wgpu::Instance::new(InstanceDescriptor::new_without_display_handle_from_env());
         let surface = instance.create_surface(window).unwrap();
 
         let adapter = instance
@@ -652,6 +670,7 @@ impl Gpu {
                 power_preference: wgpu::PowerPreference::default(),
                 compatible_surface: Some(&surface),
                 force_fallback_adapter: false,
+                apply_limit_buckets: false,
             })
             .await
             .expect("Failed to request adapter!");
@@ -694,6 +713,7 @@ impl Gpu {
             alpha_mode: surface_capabilities.alpha_modes[0],
             view_formats: vec![],
             desired_maximum_frame_latency: 2,
+            color_space: wgpu::SurfaceColorSpace::Auto,
         };
 
         surface.configure(&device, &surface_config);
@@ -709,13 +729,15 @@ impl Gpu {
 
     #[cfg(not(target_arch = "wasm32"))]
     pub async fn new_async_headless() -> Self {
-        let instance = wgpu::Instance::new(&InstanceDescriptor::default());
+        let instance =
+            wgpu::Instance::new(InstanceDescriptor::new_without_display_handle_from_env());
 
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::default(),
                 compatible_surface: None,
                 force_fallback_adapter: false,
+                apply_limit_buckets: false,
             })
             .await
             .expect("Failed to request adapter!");
@@ -745,6 +767,7 @@ impl Gpu {
             alpha_mode: wgpu::CompositeAlphaMode::Opaque,
             view_formats: vec![],
             desired_maximum_frame_latency: 2,
+            color_space: wgpu::SurfaceColorSpace::Auto,
         };
 
         let dummy_surface = unsafe {
@@ -755,7 +778,7 @@ impl Gpu {
             );
             instance
                 .create_surface_unsafe(wgpu::SurfaceTargetUnsafe::RawHandle {
-                    raw_display_handle: handle,
+                    raw_display_handle: Some(handle),
                     raw_window_handle: window_handle,
                 })
                 .unwrap()
@@ -852,8 +875,8 @@ impl Scene {
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: None,
-            bind_group_layouts: &[&uniform.bind_group_layout],
-            push_constant_ranges: &[],
+            bind_group_layouts: &[Some(&uniform.bind_group_layout)],
+            immediate_size: 0,
         });
 
         device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -862,7 +885,7 @@ impl Scene {
             vertex: wgpu::VertexState {
                 module: &shader_module,
                 entry_point: Some("vertex_main"),
-                buffers: &[Vertex::description(&Vertex::vertex_attributes())],
+                buffers: &[Some(Vertex::description(&Vertex::vertex_attributes()))],
                 compilation_options: Default::default(),
             },
             primitive: wgpu::PrimitiveState {
@@ -876,8 +899,8 @@ impl Scene {
             },
             depth_stencil: Some(wgpu::DepthStencilState {
                 format: Renderer::DEPTH_FORMAT,
-                depth_write_enabled: true,
-                depth_compare: wgpu::CompareFunction::Less,
+                depth_write_enabled: Some(true),
+                depth_compare: Some(wgpu::CompareFunction::Less),
                 stencil: wgpu::StencilState::default(),
                 bias: wgpu::DepthBiasState::default(),
             }),
@@ -896,7 +919,7 @@ impl Scene {
                 })],
                 compilation_options: Default::default(),
             }),
-            multiview: None,
+            multiview_mask: None,
             cache: None,
         })
     }

@@ -1,45 +1,51 @@
 [package]
-name = "app"
+name = "app_core"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.90"
+rust-version = "1.100"
+default-run = "app"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
 path = "src/lib.rs"
-name = "app_core"
+
+[[bin]]
+name = "app"
+path = "src/main.rs"
 
 [dependencies]
-bytemuck = { version = "1.24.0", features = ["derive"] }
-egui = "0.33.3"
-egui-wgpu = { version = "0.33.3", features = ["winit"] }
-futures = "0.3.31"
-log = "0.4.29"
-nalgebra-glm = { version = "0.20.0", features = [
+bytemuck = { version = "1.25.2", features = ["derive"] }
+egui = { version = "0.37", features = ["default_fonts"] }
+egui-wgpu = { version = "0.37", features = ["winit"] }
+log = "0.4.35"
+nalgebra-glm = { version = "0.21.0", features = [
     "convert-bytemuck",
     "serde-serialize",
 ] }
-openxr = { version = "0.19", features = ["loaded"], optional = true }
 web-time = "1.1.0"
-wgpu = { version = "27.0.1", default-features = false }
-winit = "0.30.12"
+wgpu = { version = "30", default-features = false }
+winit = "0.30.13"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 ash = { version = "0.38", optional = true }
-env_logger = "0.11.8"
-egui-winit = "0.33.3"
+env_logger = "0.11.11"
+egui-winit = "0.37"
 gpu-allocator = { version = "0.28", optional = true }
-pollster = "0.4.0"
-wgpu-hal = { version = "27.0.4", optional = true }
+pollster = "1.0.2"
+wgpu-hal = { version = "30", features = ["vulkan"], optional = true }
+
+[target.'cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))'.dependencies]
+openxr = { version = "0.22", features = ["static", "loaded"], optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 console_error_panic_hook = "0.1.7"
-console_log = "1.0.0"
-egui-winit = { version = "0.33.3", default-features = false }
-js-sys = { version = "0.3", optional = true }
-wasm-bindgen = "0.2.106"
-wasm-bindgen-futures = "0.4.56"
-web-sys = { version = "0.3", optional = true, features = [
+console_log = "1.1.0"
+egui-winit = { version = "0.37", default-features = false }
+futures = "0.3.34"
+js-sys = { version = "0.3.107", optional = true }
+wasm-bindgen = "0.2.130"
+wasm-bindgen-futures = "0.4.80"
+web-sys = { version = "0.3.107", optional = true, features = [
     "Event",
     "Navigator",
     "XrSystem",
@@ -80,9 +86,10 @@ web-sys = { version = "0.3", optional = true, features = [
 [target.'cfg(target_os = "android")'.dependencies]
 android-activity = { version = "0.6", features = ["native-activity"] }
 android_logger = "0.15"
-egui-winit = { version = "0.33.3", default-features = false }
+egui-winit = { version = "0.37", default-features = false }
 ndk-context = "0.1"
 ndk-sys = "0.6"
+openxr = { version = "0.22", default-features = false, features = ["loaded"], optional = true }
 
 [features]
 default = ["wgpu/default"]
